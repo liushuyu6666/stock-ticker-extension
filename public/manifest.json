@@ -3,22 +3,29 @@
   "name": "Stock Ticker",
   "version": "0.1.0",
   "description": "A compact market-ticker bar: ticker, current/target price, and a one-year sparkline.",
-  "permissions": ["storage", "alarms"],
-  "host_permissions": ["https://query1.finance.yahoo.com/*"],
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://query1.finance.yahoo.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start",
       "all_frames": false
     }
   ],
-  "chrome_url_overrides": {
-    "newtab": "newtab.html"
-  },
   "options_page": "config.html",
   "action": {
     "default_title": "Stock Ticker options"

@@ -16,7 +16,6 @@ const options = {
   entryPoints: {
     background: resolve(root, 'src/background/index.ts'),
     content: resolve(root, 'src/content/index.ts'),
-    newtab: resolve(root, 'src/newtab/index.ts'),
     config: resolve(root, 'src/config/index.ts')
   },
   outdir,

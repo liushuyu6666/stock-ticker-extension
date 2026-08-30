@@ -24,14 +24,17 @@ pick changes up. `yarn check` runs the type check and a clean build.
 # Where the bar appears
 
 A Chrome extension cannot draw into browser chrome, so the strip is page
-content, mounted on two surfaces:
-
-- **Every `http(s)` page**, via a content script. It lives in a shadow root, so
-  the page's CSS cannot reach it and its CSS cannot leak out.
-- **The new tab page**, via `chrome_url_overrides`.
+content, injected into **every `http(s)` page** by a content script. It lives in
+a shadow root, so the page's CSS cannot reach it and its CSS cannot leak out.
 
 It cannot appear on `chrome://` pages, the Web Store, or the PDF viewer —
 extensions are not permitted to run there.
+
+**Not on the new tab page, deliberately.** Chrome offers no way to add anything
+to `chrome://new-tab-page`: `chrome_url_overrides` *replaces* it wholesale, so
+putting the bar there would cost you the wallpaper, the shortcut tiles and the
+Continue-with-these-tabs card. That trade is not worth a ticker strip, so the
+override was removed and the new tab is Chrome's own again.
 
 **Known limitation:** the bar reserves its strip by shifting the document down.
 Sites with their own `position: fixed` header still paint at viewport top and
