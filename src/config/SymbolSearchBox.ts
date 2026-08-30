@@ -21,7 +21,8 @@ export class SymbolSearchBox {
 
   constructor(
     private readonly host: HTMLElement,
-    private readonly onPick: (match: SymbolMatch) => void
+    private readonly onPick: (match: SymbolMatch) => void,
+    private readonly onViewAll: (query: string) => void
   ) {
     this.host.classList.add('search');
 
@@ -74,6 +75,19 @@ export class SymbolSearchBox {
     });
 
     this.input.addEventListener('keydown', (event) => {
+      // Enter is handled before the visibility guard on purpose: if the list
+      // has closed — a slow reply, a stray click, a query that returned
+      // nothing — Enter should still take the user somewhere useful rather
+      // than doing nothing at all.
+      if (event.key === 'Enter' && this.dropdown.hidden) {
+        const query = this.input.value.trim();
+        if (query.length > 0) {
+          event.preventDefault();
+          window.clearTimeout(this.debounce);
+          this.viewAll(query);
+        }
+        return;
+      }
       if (this.dropdown.hidden) return;
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -83,8 +97,11 @@ export class SymbolSearchBox {
         this.move(-1);
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        const match = this.matches[this.highlighted] ?? this.matches[0];
+        // Arrow-selected row opens that symbol; a bare Enter shows everything,
+        // since the seven rows on offer are only the top of a longer list.
+        const match = this.matches[this.highlighted];
         if (match) this.pick(match);
+        else this.viewAll(this.input.value.trim());
       } else if (event.key === 'Escape') {
         this.close();
       }
@@ -117,8 +134,8 @@ export class SymbolSearchBox {
     if (this.matches.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'search-empty';
-      empty.textContent = `No match for “${query}”`;
-      this.dropdown.append(empty);
+      empty.textContent = `No quick match for “${query}”`;
+      this.dropdown.append(empty, this.viewAllRow(query));
       this.dropdown.hidden = false;
       return;
     }
@@ -156,8 +173,29 @@ export class SymbolSearchBox {
       this.dropdown.append(row);
     });
 
+    this.dropdown.append(this.viewAllRow(query));
     this.dropdown.hidden = false;
     this.paintHighlight();
+  }
+
+  /**
+   * The dropdown's endpoint returns seven rows and ignores any larger request,
+   * so this is not merely a longer view of the same call — it is the only way
+   * to reach the rest of the matches.
+   */
+  private viewAllRow(query: string): HTMLElement {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'search-viewall';
+    row.textContent = `View all matches for “${query}”`;
+    row.addEventListener('click', () => this.viewAll(query));
+    return row;
+  }
+
+  private viewAll(query: string): void {
+    if (query.length === 0) return;
+    this.close();
+    this.onViewAll(query);
   }
 
   private move(delta: number): void {
@@ -169,7 +207,7 @@ export class SymbolSearchBox {
   }
 
   private paintHighlight(): void {
-    for (const row of this.dropdown.querySelectorAll<HTMLElement>('.search-row')) {
+    for (const row of this.dropdown.querySelectorAll<HTMLElement>('.search-row:not(.search-viewall)')) {
       row.classList.toggle('is-highlighted', Number(row.dataset.index) === this.highlighted);
     }
   }

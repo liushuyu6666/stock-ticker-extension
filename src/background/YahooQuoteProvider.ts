@@ -1,4 +1,4 @@
-import type { DailyBar, Quote } from '../shared/types';
+import type { DailyBar, Quote, SymbolPreview } from '../shared/types';
 import type { HistoryRange, QuoteProvider } from './QuoteProvider';
 
 const SPARK_URL = 'https://query1.finance.yahoo.com/v7/finance/spark';
@@ -63,6 +63,43 @@ export class YahooQuoteProvider implements QuoteProvider {
     return result;
   }
 
+  /**
+   * One `range=1y` call yields both the meta block the dialog's numbers come
+   * from and the full close series its sparkline draws, so the popup costs a
+   * single request.
+   */
+  async fetchPreview(symbol: string): Promise<Omit<SymbolPreview, 'onWatchlist' | 'targetPrice'>> {
+    const [entry] = await this.request([symbol], '1y');
+    const response = entry?.response?.[0];
+    const meta = response?.meta;
+    if (!meta) {
+      throw new Error(
+        `[stock-ticker][YahooQuoteProvider][fetchPreview] no data for symbol (symbol=${symbol})`
+      );
+    }
+
+    const stamps = response?.timestamp;
+    const rawCloses = response?.indicators?.quote?.[0]?.close;
+    const closes: number[] =
+      Array.isArray(stamps) && Array.isArray(rawCloses)
+        ? rawCloses.filter((close): close is number => typeof close === 'number' && Number.isFinite(close))
+        : [];
+
+    return {
+      symbol,
+      name: pickString(meta.longName, meta.shortName) ?? symbol,
+      exchange: pickString(meta.fullExchangeName, meta.exchangeName) ?? '',
+      currency: pickString(meta.currency) ?? '',
+      price: pickNumber(meta.regularMarketPrice),
+      changePercent: pickNumber(meta.regularMarketChangePercent),
+      fiftyTwoWeekHigh: pickNumber(meta.fiftyTwoWeekHigh),
+      fiftyTwoWeekLow: pickNumber(meta.fiftyTwoWeekLow),
+      dayHigh: pickNumber(meta.regularMarketDayHigh),
+      dayLow: pickNumber(meta.regularMarketDayLow),
+      closes
+    };
+  }
+
   private async request(symbols: string[], range: '1d' | HistoryRange): Promise<SparkEntry[]> {
     const url = `${SPARK_URL}?symbols=${encodeURIComponent(symbols.join(','))}&range=${range}&interval=1d`;
     const response = await fetch(url, {
@@ -84,6 +121,10 @@ export class YahooQuoteProvider implements QuoteProvider {
     }
     return results as SparkEntry[];
   }
+}
+
+function pickNumber(candidate: unknown): number | null {
+  return typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : null;
 }
 
 function pickString(...candidates: unknown[]): string | null {

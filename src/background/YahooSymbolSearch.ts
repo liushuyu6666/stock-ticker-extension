@@ -2,11 +2,21 @@ import type { SymbolMatch } from '../shared/types';
 import type { SymbolSearch } from './SymbolSearch';
 
 const SEARCH_URL = 'https://query1.finance.yahoo.com/v1/finance/search';
+const LOOKUP_URL = 'https://query1.finance.yahoo.com/v1/finance/lookup';
 
 /**
- * Yahoo's search endpoint, which honours `quotesCount` exactly — so the
- * dropdown's cap is enforced upstream rather than by slicing a longer list.
- * Free and keyless, and undocumented like the rest of the Yahoo surface.
+ * Two endpoints, because one cannot do both jobs.
+ *
+ * `search` is the ranked shortlist behind the dropdown. It returns exactly
+ * seven rows and ignores a larger `quotesCount` — verified against the live
+ * endpoint — which is why the long list has to come from somewhere else.
+ *
+ * `lookup` is that somewhere else: it honours `count` into the dozens and
+ * carries a price and day change on every row, so the results page can show
+ * them without a request per row. Its `exchange` is a terse code (`NMS`,
+ * `GER`) rather than the display name `search` returns, hence the map below.
+ *
+ * Both are undocumented, like the rest of the Yahoo surface.
  */
 export class YahooSymbolSearch implements SymbolSearch {
   async search(query: string, limit: number): Promise<SymbolMatch[]> {
@@ -16,21 +26,13 @@ export class YahooSymbolSearch implements SymbolSearch {
     const url =
       `${SEARCH_URL}?q=${encodeURIComponent(trimmed)}` +
       `&quotesCount=${limit}&newsCount=0&listsCount=0&enableFuzzyQuery=false`;
+    const body = await request<SearchBody>(url, 'search', trimmed);
 
-    const response = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(
-        `[stock-ticker][YahooSymbolSearch][search] upstream rejected the request (status=${response.status} query=${trimmed})`
-      );
-    }
-
-    const body = await response.json();
     const quotes = body?.quotes;
     if (!Array.isArray(quotes)) return [];
-
     return quotes
-      .filter((quote: RawQuote) => typeof quote?.symbol === 'string' && quote.symbol.length > 0)
-      .map((quote: RawQuote) => ({
+      .filter((quote: RawSearchQuote) => typeof quote?.symbol === 'string' && quote.symbol.length > 0)
+      .map((quote: RawSearchQuote) => ({
         symbol: quote.symbol,
         // longname is fuller but absent on some instruments; shortname always is.
         name: quote.longname ?? quote.shortname ?? quote.symbol,
@@ -38,9 +40,94 @@ export class YahooSymbolSearch implements SymbolSearch {
         type: quote.typeDisp ?? quote.quoteType ?? ''
       }));
   }
+
+  async lookup(query: string, limit: number): Promise<SymbolMatch[]> {
+    const trimmed = query.trim();
+    if (trimmed.length === 0) return [];
+
+    const url =
+      `${LOOKUP_URL}?query=${encodeURIComponent(trimmed)}` +
+      `&type=all&count=${limit}&start=0&formatted=false&lang=en-US&region=US`;
+    const body = await request<LookupBody>(url, 'lookup', trimmed);
+
+    const documents = body?.finance?.result?.[0]?.documents;
+    if (!Array.isArray(documents)) return [];
+    return documents
+      .filter((doc: RawLookupDoc) => typeof doc?.symbol === 'string' && doc.symbol.length > 0)
+      .map((doc: RawLookupDoc) => ({
+        symbol: doc.symbol,
+        name: doc.shortName ?? doc.symbol,
+        exchange: displayExchange(doc.exchange),
+        type: doc.quoteType ?? '',
+        price: typeof doc.regularMarketPrice === 'number' ? doc.regularMarketPrice : null,
+        changePercent:
+          typeof doc.regularMarketPercentChange === 'number' ? doc.regularMarketPercentChange : null
+      }));
+  }
 }
 
-interface RawQuote {
+async function request<T>(url: string, step: string, query: string): Promise<T> {
+  const response = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(
+      `[stock-ticker][YahooSymbolSearch][${step}] upstream rejected the request (status=${response.status} query=${query})`
+    );
+  }
+  return (await response.json()) as T;
+}
+
+/**
+ * The lookup endpoint reports Yahoo's internal exchange codes. Mapping the
+ * common ones keeps a row readable; anything unmapped falls through as-is,
+ * which is still better than blank.
+ */
+const EXCHANGE_NAMES: Record<string, string> = {
+  NMS: 'NASDAQ',
+  NGM: 'NASDAQ',
+  NCM: 'NASDAQ',
+  NYQ: 'NYSE',
+  ASE: 'NYSE American',
+  PCX: 'NYSE Arca',
+  BTS: 'BATS',
+  TOR: 'Toronto',
+  VAN: 'TSXV',
+  NEO: 'NEO',
+  CNQ: 'CSE',
+  LSE: 'London',
+  GER: 'XETRA',
+  FRA: 'Frankfurt',
+  MIL: 'Milan',
+  PAR: 'Paris',
+  AMS: 'Amsterdam',
+  STO: 'Stockholm',
+  SWX: 'Swiss',
+  HKG: 'Hong Kong',
+  TYO: 'Tokyo',
+  JPX: 'Tokyo',
+  ASX: 'Australia',
+  SET: 'Thailand',
+  NSI: 'NSE India',
+  BSE: 'BSE India',
+  SAO: 'São Paulo',
+  MEX: 'Mexico',
+  CCC: 'Crypto',
+  CCY: 'Currency'
+};
+
+function displayExchange(code: string | undefined): string {
+  if (!code) return '';
+  return EXCHANGE_NAMES[code] ?? code;
+}
+
+interface SearchBody {
+  quotes?: RawSearchQuote[];
+}
+
+interface LookupBody {
+  finance?: { result?: Array<{ documents?: RawLookupDoc[] }> };
+}
+
+interface RawSearchQuote {
   symbol: string;
   longname?: string;
   shortname?: string;
@@ -48,4 +135,13 @@ interface RawQuote {
   exchange?: string;
   typeDisp?: string;
   quoteType?: string;
+}
+
+interface RawLookupDoc {
+  symbol: string;
+  shortName?: string;
+  exchange?: string;
+  quoteType?: string;
+  regularMarketPrice?: number;
+  regularMarketPercentChange?: number;
 }

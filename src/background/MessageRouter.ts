@@ -1,5 +1,6 @@
 import type { Request, Response } from '../shared/messages';
 import type { HistoryStore } from './HistoryStore';
+import type { QuoteProvider } from './QuoteProvider';
 import type { RefreshScheduler } from './RefreshScheduler';
 import type { SymbolSearch } from './SymbolSearch';
 import type { TickerService } from './TickerService';
@@ -9,13 +10,19 @@ import type { WatchlistRepository } from './WatchlistRepository';
 export class MessageRouter {
   /** The dropdown shows at most this many candidates. */
   private static readonly SEARCH_LIMIT = 7;
+  /**
+   * The results page asks the lookup endpoint for this many. The dropdown's
+   * endpoint refuses to return more than seven no matter what it is asked.
+   */
+  private static readonly LOOKUP_LIMIT = 50;
 
   constructor(
     private readonly ticker: TickerService,
     private readonly watchlist: WatchlistRepository,
     private readonly scheduler: RefreshScheduler,
     private readonly search: SymbolSearch,
-    private readonly history: HistoryStore
+    private readonly history: HistoryStore,
+    private readonly provider: QuoteProvider
   ) {}
 
   /**
@@ -55,6 +62,21 @@ export class MessageRouter {
 
       case 'SEARCH_SYMBOLS':
         return { ok: true, matches: await this.search.search(request.query, MessageRouter.SEARCH_LIMIT) };
+
+      case 'LOOKUP_SYMBOLS':
+        return { ok: true, matches: await this.search.lookup(request.query, MessageRouter.LOOKUP_LIMIT) };
+
+      case 'PREVIEW_SYMBOL': {
+        const symbol = request.symbol.toUpperCase();
+        const preview = await this.provider.fetchPreview(symbol);
+        // Told here rather than inferred in the UI, so the dialog knows whether
+        // to offer Add or Remove without a second round trip.
+        const entry = (await this.watchlist.list()).find((candidate) => candidate.symbol === symbol);
+        return {
+          ok: true,
+          preview: { ...preview, onWatchlist: entry !== undefined, targetPrice: entry?.targetPrice ?? 0 }
+        };
+      }
 
       case 'ADD_SYMBOL': {
         const added = await this.watchlist.add(request.match, request.targetPrice);

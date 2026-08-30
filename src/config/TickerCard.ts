@@ -20,7 +20,8 @@ export class TickerCard {
   constructor(
     private readonly row: TickerRow,
     private readonly onTargetChange: (symbol: string, targetPrice: number) => void,
-    private readonly onRemove: (row: TickerRow) => void
+    private readonly onRemove: (row: TickerRow) => void,
+    private readonly onOpen: (row: TickerRow) => void
   ) {}
 
   render(): HTMLElement {
@@ -30,6 +31,15 @@ export class TickerCard {
     card.dataset.symbol = row.symbol;
 
     card.append(this.renderHeader(), this.renderPrice(), this.renderSparkline(), this.renderTarget());
+
+    // The card opens its detail view, but the target field and the remove
+    // button are controls in their own right — a click on either is theirs.
+    card.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('.card-target') || target.closest('.card-remove')) return;
+      this.onOpen(row);
+    });
+    card.title = `Show details for ${row.symbol}`;
     return card;
   }
 

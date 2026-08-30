@@ -58,9 +58,25 @@ blur or Enter rather than per keystroke, so typing `1` on the way to `180` does
 not write storage or repaint the card mid-edit.
 
 **Adding** goes through the search box at the top right: type a symbol or a
-company name, pick from at most seven matches (each showing symbol, long name
-and exchange), and confirm. The year of history is fetched immediately, so the
-sparkline is populated by the time the card appears.
+company name and pick from at most seven matches, each showing symbol, long name
+and exchange. The year of history is fetched immediately, so the sparkline is
+populated by the time the card appears.
+
+Seven is Yahoo's hard cap on that endpoint, so the dropdown ends with a
+**View all matches** link to the full list — fifty-odd rows with a price, day
+change, instrument type and an *Added* marker on anything already tracked.
+Pressing **Enter** goes there too, which matters because the dropdown can close
+underneath you mid-type: a slow reply, a stray click, a query with no quick
+match. Enter always lands somewhere useful. Arrow-select a row first and Enter
+opens that symbol instead.
+
+**Clicking anything — a dropdown row, a results row, or a card already on the
+bar — opens a detail dialog**: current price with the day's change, a large
+one-year sparkline, the day's and 52-week ranges, and the target field. For a
+symbol you do not yet track it offers *Add ticker*; for one you do, *Save
+target* and *Remove*. The sparkline retints live as you type a target across the
+current price, so you can see which side of your line the year sits on before
+committing.
 
 **Removing** asks for confirmation, then deletes the ticker *and its stored
 history*, reclaiming the space rather than orphaning a series no one reads.
@@ -83,17 +99,19 @@ background (service worker)
         ▼                        ▼                  ▼
    QuoteProvider            HistoryStore     WatchlistRepository
    └ YahooQuoteProvider     └ LocalHistoryStore
-   SymbolSearch
+   SymbolSearch  (search = dropdown, lookup = full results)
    └ YahooSymbolSearch
   MessageRouter  ◄── chrome.runtime.onMessage
         ▲
         │  request / storage.onChanged
   ┌─────┴──────────────────┐   ┌───────────────────────────────┐
-  │ content script │new tab │   │ config page                   │
+  │ content script          │   │ config page                   │
   │   TickerClient          │   │   ConfigApp                   │
   │   TickerBar → StockCard │   │    ├ SidebarNav               │
   │            → sparkline  │   │    ├ SymbolSearchBox          │
   └─────────────────────────┘   │    ├ TickerGrid → TickerCard  │
+                                │    ├ SearchResultsView        │
+                                │    ├ TickerDetailDialog       │
                                 │    └ ConfirmDialog            │
                                 └───────────────────────────────┘
 ```
@@ -147,6 +165,8 @@ Four triggers, and nothing else reaches the network.
 | **Every minute** | `spark?range=1d` | Price only. Fires **only while a bar is on screen**: if nothing has asked for a snapshot in 5 minutes, the alarm runs and does nothing |
 | **Every hour** | `spark?range=5d…1y` | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
 | **Adding a ticker** | `spark?range=1y` | Immediate backfill, so the sparkline is populated by the time the card appears |
+| **"View all" / Enter** | `v1/finance/lookup` | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row, so the results page needs no request per row |
+| **Opening a ticker's details** | `spark?range=1y` | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist |
 
 Browser startup and the manual refresh also run a gap check followed by a quote
 poll, on the same two code paths.
@@ -245,15 +265,46 @@ that day.
 
 # Design notes
 
-- **Sparkline density** is an explicit budget per size, not a function of width:
-  the legible density is sub-linear. The 46px bar uses 28 points and the 260px
-  card uses 70, each picked by rendering a year of real closes across five
-  budgets and taking the last one that still reads as a trend line rather than a
-  scratchy trace.
 - **Search is debounced at 220ms and guarded by a monotonic query token**, so a
   slow reply for `ms` cannot overwrite the results already shown for `msft`.
 - **Cards have no separators**, per spec. Adding a hairline is one rule in
   `src/ui/styles.ts`.
-- **The marquee only runs when the content overflows**, duplicating the card
-  group so the wrap-around is seamless. It pauses on hover, and
+
+### Sparkline density
+
+A year is ~251 daily closes, but almost nowhere should draw all of them. Each
+size declares its own **point budget** — the series is evenly downsampled to
+that many points before the path is built.
+
+| Where | Size | Budget | Constant |
+|---|---|---|---|
+| Ticker bar card | 46 × 14 | **28** | `MAX_POINTS` (default) |
+| Config page card | 260 × 48 | **70** | `SNAPSHOT_SERIES_POINTS` |
+| Detail dialog | 435 × 108 | **110** | `DETAIL_SERIES_POINTS` |
+
+**The budget is declared, never derived from width.** The first version scaled
+it linearly, which handed the 260px card ~158 points and made it visibly
+scratchy — the same noise the 46px bar had already been tuned away from. Legible
+density is *sub-linear* in width, and it depends on height too: a taller box
+gives the line room to separate, so the detail dialog tolerates far more points
+per pixel than the bar does.
+
+Each number was chosen the same way — render a year of real closes across five
+budgets at that exact size, then take the densest one that still reads as a
+trend line rather than a scratchy trace:
+
+- At **46px** the choice is stark. 64 and 40 points are noise; 14 collapses the
+  year's actual shape. 28 is the only comfortable answer.
+- At **260px** it is subtler. 158 is scratchy and 34 over-smooths, with 70 the
+  balance.
+- At **435 × 108** it barely matters — even the full 251 points read cleanly,
+  because the height carries them. 110 was taken as the middle.
+
+`SNAPSHOT_SERIES_POINTS` does double duty: it is also the cap on what the
+published snapshot stores, so the largest thing routinely drawn and the most
+that is kept are one constant rather than two that can drift. The detail dialog
+exceeds it only because it fetches its own full-resolution year on demand.
+- **The marquee clones the row set** until it covers the viewport plus one copy,
+  then travels exactly one copy's width — which loops seamlessly whether the
+  cards overflow the screen or fall well short of it. It pauses on hover, and
   `prefers-reduced-motion` swaps it for ordinary horizontal scrolling.

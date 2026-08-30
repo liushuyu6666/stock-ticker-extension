@@ -6,7 +6,8 @@ export class TickerGrid {
   constructor(
     private readonly host: HTMLElement,
     private readonly onTargetChange: (symbol: string, targetPrice: number) => void,
-    private readonly onRemove: (row: TickerRow) => void
+    private readonly onRemove: (row: TickerRow) => void,
+    private readonly onOpen: (row: TickerRow) => void
   ) {}
 
   render(rows: TickerRow[]): void {
@@ -18,7 +19,7 @@ export class TickerGrid {
     const grid = document.createElement('div');
     grid.className = 'grid';
     for (const row of rows) {
-      grid.append(new TickerCard(row, this.onTargetChange, this.onRemove).render());
+      grid.append(new TickerCard(row, this.onTargetChange, this.onRemove, this.onOpen).render());
     }
     this.host.replaceChildren(grid);
   }

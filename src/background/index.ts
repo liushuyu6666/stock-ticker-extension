@@ -16,7 +16,7 @@ const history = new LocalHistoryStore();
 const watchlist = new WatchlistRepository();
 const ticker = new TickerService(provider, history, watchlist);
 const scheduler = new RefreshScheduler(ticker, provider, history, watchlist);
-const router = new MessageRouter(ticker, watchlist, scheduler, search, history);
+const router = new MessageRouter(ticker, watchlist, scheduler, search, history, provider);
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) =>
   router.handle(request, sendResponse)

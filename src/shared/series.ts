@@ -13,6 +13,13 @@ export const SNAPSHOT_SERIES_POINTS = 70;
  */
 export const MAX_HISTORY_BARS = 260;
 
+/**
+ * Budget for the detail dialog's large sparkline. Picked the same way as the
+ * other two — by rendering a year of real closes across several budgets at the
+ * dialog's width and taking the densest one that still reads as a trend line.
+ */
+export const DETAIL_SERIES_POINTS = 110;
+
 /** Evenly samples down to at most `limit` points, always keeping first and last. */
 export function downsampleSeries(values: number[], limit: number): number[] {
   const clean = values.filter((value) => Number.isFinite(value));

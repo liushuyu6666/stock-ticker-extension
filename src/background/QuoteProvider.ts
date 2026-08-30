@@ -1,4 +1,4 @@
-import type { DailyBar, Quote } from '../shared/types';
+import type { DailyBar, Quote, SymbolPreview } from '../shared/types';
 
 /**
  * How far back to ask for daily bars. Yahoo only accepts a fixed vocabulary of
@@ -20,4 +20,11 @@ export interface QuoteProvider {
    * the symbols whose stored series has actually fallen behind.
    */
   fetchHistory(symbols: string[], range: HistoryRange): Promise<Map<string, DailyBar[]>>;
+
+  /**
+   * Everything the detail dialog shows for one symbol. Deliberately separate
+   * from the two above: it is driven by a click, not by a schedule, and it may
+   * be asked about a symbol that is not on the watchlist at all.
+   */
+  fetchPreview(symbol: string): Promise<Omit<SymbolPreview, 'onWatchlist' | 'targetPrice'>>;
 }

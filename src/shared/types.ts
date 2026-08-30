@@ -17,6 +17,28 @@ export interface SymbolMatch {
   exchange: string;
   /** "EQUITY", "ETF", "INDEX"… shown as a chip so ETFs are obvious. */
   type: string;
+  /** Only the lookup endpoint carries these; the dropdown's does not. */
+  price?: number | null;
+  changePercent?: number | null;
+}
+
+/** Everything the detail popup shows for one symbol, from a single request. */
+export interface SymbolPreview {
+  symbol: string;
+  name: string;
+  exchange: string;
+  currency: string;
+  price: number | null;
+  changePercent: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  /** Full one-year series — richer than the snapshot's render payload. */
+  closes: number[];
+  /** Lets the dialog offer "Add" or "Remove" without a second round trip. */
+  onWatchlist: boolean;
+  targetPrice: number;
 }
 
 /** A live (typically ~15 min delayed) price for one symbol. */

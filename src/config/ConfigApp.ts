@@ -1,8 +1,10 @@
 import { STORAGE_KEYS, sendMessage } from '../shared/messages';
 import type { SymbolMatch, TickerRow, TickerSnapshot } from '../shared/types';
 import { ConfirmDialog } from './ConfirmDialog';
+import { SearchResultsView } from './SearchResultsView';
 import { SidebarNav } from './SidebarNav';
 import { SymbolSearchBox } from './SymbolSearchBox';
+import { TickerDetailDialog } from './TickerDetailDialog';
 import { TickerGrid } from './TickerGrid';
 
 const SECTIONS = [
@@ -14,38 +16,54 @@ const SECTIONS = [
 ];
 
 /**
- * Shell and controller for the config page. Owns the current rows, wires the
- * three views together, and is the only place that talks to the worker.
+ * Shell and controller for the config page. Owns the current rows, routes
+ * between the grid and the results list, and is the only place that talks to
+ * the worker.
  */
 export class ConfigApp {
   private readonly sidebar: SidebarNav;
   private readonly search: SymbolSearchBox;
   private readonly grid: TickerGrid;
-  private readonly dialog: ConfirmDialog;
+  private readonly results: SearchResultsView;
+  private readonly confirm: ConfirmDialog;
+  private readonly detail: TickerDetailDialog;
   private readonly status: HTMLElement;
+  private readonly body: HTMLElement;
+
   private rows: TickerRow[] = [];
+  /** Null while the grid is showing; the query string while results are. */
+  private resultsQuery: string | null = null;
+  private statusTimer: number | undefined;
 
   constructor() {
     this.status = document.getElementById('status') as HTMLElement;
-    this.dialog = new ConfirmDialog(document.body);
+    this.body = document.getElementById('main-body') as HTMLElement;
+    this.confirm = new ConfirmDialog(document.body);
+    this.detail = new TickerDetailDialog(document.body);
 
     this.sidebar = new SidebarNav(
       document.getElementById('sidebar') as HTMLElement,
       SECTIONS,
-      () => {
-        /* Only one section today; selecting it is already a no-op re-render. */
-      }
+      () => this.showTickers()
     );
 
     this.search = new SymbolSearchBox(
       document.getElementById('search') as HTMLElement,
-      (match) => void this.confirmAdd(match)
+      (match) => void this.openDetail(match.symbol),
+      (query) => void this.showResults(query)
     );
 
     this.grid = new TickerGrid(
-      document.getElementById('main-body') as HTMLElement,
+      this.body,
       (symbol, targetPrice) => void this.setTarget(symbol, targetPrice),
-      (row) => void this.confirmRemove(row)
+      (row) => void this.confirmRemove(row),
+      (row) => void this.openDetail(row.symbol)
+    );
+
+    this.results = new SearchResultsView(
+      this.body,
+      (symbol) => void this.openDetail(symbol),
+      () => this.showTickers()
     );
   }
 
@@ -63,45 +81,74 @@ export class ConfigApp {
     if ('snapshot' in response && response.ok) this.apply(response.snapshot);
   }
 
+  // ---- views ----
+
+  private showTickers(): void {
+    this.resultsQuery = null;
+    this.grid.render(this.rows);
+  }
+
+  private async showResults(query: string): Promise<void> {
+    this.resultsQuery = query;
+    await this.results.render(query, new Set(this.rows.map((row) => row.symbol)));
+  }
+
+  /**
+   * Repaints whichever view is showing. A snapshot arriving while the results
+   * list is open must not yank the user back to the grid.
+   */
   private apply(snapshot: TickerSnapshot): void {
     this.rows = snapshot.rows;
-    this.grid.render(this.rows);
     this.sidebar.setBadge('tickers', String(this.rows.length));
     const counter = document.getElementById('main-count');
     if (counter) {
       counter.textContent = this.rows.length === 1 ? '1 ticker' : `${this.rows.length} tickers`;
     }
-    if (snapshot.error) this.setStatus(`Last refresh failed — showing cached prices.`, true);
+    if (this.resultsQuery === null) this.grid.render(this.rows);
+    if (snapshot.error) this.setStatus('Last refresh failed — showing cached prices.', true);
   }
 
-  private async confirmAdd(match: SymbolMatch): Promise<void> {
-    const exchange = match.exchange ? ` · ${match.exchange}` : '';
-    const result = await this.dialog.ask({
-      title: `Add ${match.symbol}?`,
-      body: `${match.name}${exchange}. A year of daily closes is fetched right away so the sparkline is ready immediately.`,
-      confirmLabel: 'Add ticker',
-      numberField: { label: 'Target price (optional)', value: 0, placeholder: '0.00' }
-    });
-    if (!result.confirmed) return;
+  // ---- actions ----
 
+  /** One dialog serves both "should I add this?" and "what am I holding?". */
+  private async openDetail(symbol: string): Promise<void> {
+    const outcome = await this.detail.open(symbol);
+    if (outcome.action === 'none') return;
+
+    if (outcome.action === 'remove') {
+      const row = this.rows.find((candidate) => candidate.symbol === symbol);
+      if (row) await this.confirmRemove(row);
+      return;
+    }
+
+    const existing = this.rows.find((candidate) => candidate.symbol === symbol);
+    if (existing) {
+      await this.setTarget(symbol, outcome.targetPrice);
+      return;
+    }
+    await this.add(symbol, outcome.targetPrice);
+  }
+
+  private async add(symbol: string, targetPrice: number): Promise<void> {
     this.search.clear();
-    this.setStatus(`Adding ${match.symbol} and fetching its history…`, false);
-    const response = await sendMessage({
-      type: 'ADD_SYMBOL',
-      match,
-      targetPrice: result.numberValue
-    });
+    this.setStatus(`Adding ${symbol} and fetching its history…`, false);
 
+    // The dialog only carries a symbol; the worker fills in name and exchange
+    // from the quote payload on the refresh that follows.
+    const match: SymbolMatch = { symbol, name: symbol, exchange: '', type: '' };
+    const response = await sendMessage({ type: 'ADD_SYMBOL', match, targetPrice });
     if (!response.ok) {
       this.setStatus(response.error, true);
       return;
     }
     if ('snapshot' in response) this.apply(response.snapshot);
-    this.setStatus(`${match.symbol} added.`, false);
+    this.setStatus(`${symbol} added.`, false);
+    // Reflect the new "Added" chip if the results list is what is on screen.
+    if (this.resultsQuery !== null) await this.showResults(this.resultsQuery);
   }
 
   private async confirmRemove(row: TickerRow): Promise<void> {
-    const result = await this.dialog.ask({
+    const result = await this.confirm.ask({
       title: `Remove ${row.symbol}?`,
       body: `${row.name} will be removed from the bar, and its stored year of daily closes will be deleted to reclaim the space.`,
       confirmLabel: 'Remove',
@@ -116,6 +163,7 @@ export class ConfigApp {
     }
     if ('snapshot' in response) this.apply(response.snapshot);
     this.setStatus(`${row.symbol} removed, history deleted.`, false);
+    if (this.resultsQuery !== null) await this.showResults(this.resultsQuery);
   }
 
   private async setTarget(symbol: string, targetPrice: number): Promise<void> {
@@ -137,6 +185,4 @@ export class ConfigApp {
       this.status.className = 'status';
     }, 4000);
   }
-
-  private statusTimer: number | undefined;
 }

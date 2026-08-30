@@ -1,4 +1,4 @@
-import type { SymbolMatch, TickerSnapshot, WatchlistEntry } from './types';
+import type { SymbolMatch, SymbolPreview, TickerSnapshot, WatchlistEntry } from './types';
 
 export const STORAGE_KEYS = {
   watchlist: 'watchlist',
@@ -12,6 +12,8 @@ export type Request =
   | { type: 'GET_SNAPSHOT' }
   | { type: 'GET_WATCHLIST' }
   | { type: 'SEARCH_SYMBOLS'; query: string }
+  | { type: 'LOOKUP_SYMBOLS'; query: string }
+  | { type: 'PREVIEW_SYMBOL'; symbol: string }
   | { type: 'ADD_SYMBOL'; match: SymbolMatch; targetPrice: number }
   | { type: 'REMOVE_SYMBOL'; symbol: string }
   | { type: 'SET_TARGET'; symbol: string; targetPrice: number }
@@ -22,6 +24,7 @@ export type Response =
   | { ok: true; snapshot: TickerSnapshot }
   | { ok: true; entries: WatchlistEntry[] }
   | { ok: true; matches: SymbolMatch[] }
+  | { ok: true; preview: SymbolPreview }
   | { ok: true }
   | { ok: false; error: string };
 
