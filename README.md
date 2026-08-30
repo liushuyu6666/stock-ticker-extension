@@ -65,6 +65,14 @@ populated by the time the card appears.
 Seven is Yahoo's hard cap on that endpoint, so the dropdown ends with a
 **View all matches** link to the full list — fifty-odd rows with a price, day
 change, instrument type and an *Added* marker on anything already tracked.
+
+A query that wide spans a lot of venues: "microsoft" alone returns **19
+different exchanges** — the US listing plus CDRs, depositary receipts and
+leveraged ETFs from a dozen countries. So the results page carries an
+**exchange filter**, sorted busiest-venue-first (alphabetical would bury the
+listing you almost certainly want under two dozen options). It filters the rows
+already fetched rather than issuing another request, and the count reads
+"18 of 50 matches" so it is obvious something is being hidden.
 Pressing **Enter** goes there too, which matters because the dropdown can close
 underneath you mid-type: a slow reply, a stray click, a query with no quick
 match. Enter always lands somewhere useful. Arrow-select a row first and Enter

@@ -487,7 +487,52 @@ body {
 .back-link:hover { color: var(--ink); }
 
 .results-title { margin: 10px 0 2px; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
-.results-count { margin: 0 0 16px; font-size: 12.5px; color: var(--ink-faint); }
+
+.results-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+
+.results-count { margin: 0; font-size: 12.5px; color: var(--ink-faint); }
+
+.filter { display: flex; align-items: center; gap: 8px; }
+
+.filter-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.filter-select {
+  height: 30px;
+  max-width: 260px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background-color: var(--surface);
+  /* Chevron drawn inline so the control needs no image request. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%235f6368' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  text-overflow: ellipsis;
+}
+
+.filter-select:hover { background-color: var(--porcelain); }
+.filter-select:focus { border-color: var(--ink); }
 .results-status { margin: 0; font-size: 13px; color: var(--ink-soft); }
 
 .results {
