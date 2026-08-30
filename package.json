@@ -1,0 +1,18 @@
+{
+  "name": "stock-ticker-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A compact market-ticker bar for Chrome: ticker, current/target price, and a one-year sparkline.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "check": "yarn typecheck && yarn build"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.4"
+  }
+}

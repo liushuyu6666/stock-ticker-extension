@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>New Tab</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: #1f2328;
+      }
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        padding: 0 24px 12vh;
+      }
+      #search { width: min(560px, 100%); }
+      #q {
+        width: 100%;
+        height: 46px;
+        padding: 0 18px;
+        font-size: 15px;
+        color: inherit;
+        background: #f6f4f1;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 23px;
+        outline: none;
+      }
+      #q:focus { border-color: rgba(0, 0, 0, 0.28); background: #fff; }
+      footer { padding: 14px; text-align: center; }
+      #open-options { font-size: 12px; color: #9aa0a6; text-decoration: none; }
+      #open-options:hover { color: #5f6368; }
+    </style>
+  </head>
+  <body>
+    <div id="ticker-slot"></div>
+    <main>
+      <form id="search" method="get" autocomplete="off">
+        <input id="q" name="q" type="text" placeholder="Search" aria-label="Search" />
+      </form>
+    </main>
+    <footer><a id="open-options" href="#">Edit watchlist</a></footer>
+    <script src="newtab.js"></script>
+  </body>
+</html>
