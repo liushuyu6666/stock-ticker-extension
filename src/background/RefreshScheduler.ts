@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../shared/messages';
 import type { HistoryStore } from './HistoryStore';
-import type { QuoteProvider } from './QuoteProvider';
+import type { HistoryRange, QuoteProvider } from './QuoteProvider';
 import type { TickerService } from './TickerService';
 import type { WatchlistRepository } from './WatchlistRepository';
 
@@ -59,16 +59,23 @@ export class RefreshScheduler {
     await this.history.prune(symbols);
 
     const target = lastTradingDay();
-    const stale: string[] = [];
+    // Group the stale symbols by the window each one needs, so a routine daily
+    // top-up costs a 5d payload instead of re-downloading the whole year.
+    const byRange = new Map<HistoryRange, string[]>();
     for (const symbol of symbols) {
       const last = await this.history.lastBarDate(symbol);
-      // A symbol added today has no bars at all; both cases want a 1y backfill.
-      if (last === null || last < target) stale.push(symbol);
+      if (last !== null && last >= target) continue;
+      const range = rangeForGap(last, target);
+      const group = byRange.get(range);
+      if (group) group.push(symbol);
+      else byRange.set(range, [symbol]);
     }
-    if (stale.length === 0) return;
+    if (byRange.size === 0) return;
 
-    const fetched = await this.provider.fetchHistory(stale);
-    for (const [symbol, bars] of fetched) await this.history.upsert(symbol, bars);
+    for (const [range, group] of byRange) {
+      const fetched = await this.provider.fetchHistory(group, range);
+      for (const [symbol, bars] of fetched) await this.history.upsert(symbol, bars);
+    }
   }
 
   /** Records that a bar is on screen, which re-enables quote polling. */
@@ -82,6 +89,25 @@ export class RefreshScheduler {
     if (typeof seenAt !== 'number') return false;
     return Date.now() - seenAt < RefreshScheduler.CONSUMER_IDLE_MS;
   }
+}
+
+/**
+ * The smallest Yahoo range that covers the gap, with room to spare: `5d` returns
+ * five *trading* days and so spans about a week of calendar time, `1mo` about
+ * five weeks, `3mo` about thirteen. Each threshold sits well inside its window,
+ * because under-fetching would silently leave a hole in the series while
+ * over-fetching only costs bytes.
+ */
+function rangeForGap(lastBarDate: string | null, target: string): HistoryRange {
+  // A symbol added moments ago has no bars at all and wants the full year.
+  if (lastBarDate === null) return '1y';
+  const days = Math.round(
+    (Date.parse(`${target}T00:00:00Z`) - Date.parse(`${lastBarDate}T00:00:00Z`)) / 86_400_000
+  );
+  if (days <= 4) return '5d';
+  if (days <= 20) return '1mo';
+  if (days <= 80) return '3mo';
+  return '1y';
 }
 
 /**

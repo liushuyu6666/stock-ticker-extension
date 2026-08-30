@@ -1,5 +1,5 @@
 import type { DailyBar, Quote } from '../shared/types';
-import type { QuoteProvider } from './QuoteProvider';
+import type { HistoryRange, QuoteProvider } from './QuoteProvider';
 
 const SPARK_URL = 'https://query1.finance.yahoo.com/v7/finance/spark';
 
@@ -38,10 +38,10 @@ export class YahooQuoteProvider implements QuoteProvider {
     return result;
   }
 
-  async fetchHistory(symbols: string[]): Promise<Map<string, DailyBar[]>> {
+  async fetchHistory(symbols: string[], range: HistoryRange): Promise<Map<string, DailyBar[]>> {
     const result = new Map<string, DailyBar[]>();
     for (const chunk of chunked(symbols, YahooQuoteProvider.CHUNK_SIZE)) {
-      const payload = await this.request(chunk, '1y');
+      const payload = await this.request(chunk, range);
       for (const entry of payload) {
         const response = entry?.response?.[0];
         const stamps: unknown = response?.timestamp;
@@ -63,7 +63,7 @@ export class YahooQuoteProvider implements QuoteProvider {
     return result;
   }
 
-  private async request(symbols: string[], range: '1d' | '1y'): Promise<SparkEntry[]> {
+  private async request(symbols: string[], range: '1d' | HistoryRange): Promise<SparkEntry[]> {
     const url = `${SPARK_URL}?symbols=${encodeURIComponent(symbols.join(','))}&range=${range}&interval=1d`;
     const response = await fetch(url, {
       // Yahoo 404s some requests that arrive without a browser-ish Accept header.

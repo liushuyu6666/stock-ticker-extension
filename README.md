@@ -142,7 +142,7 @@ Four triggers, and nothing else reaches the network.
 |---|---|---|
 | **Typing in the search box** | `v1/finance/search` | Debounced 220 ms — one call per typing *pause*, not per keystroke. Seven results, capped upstream by `quotesCount` |
 | **Every minute** | `spark?range=1d` | Price only. Fires **only while a bar is on screen**: if nothing has asked for a snapshot in 5 minutes, the alarm runs and does nothing |
-| **Every hour** | `spark?range=1y` | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all |
+| **Every hour** | `spark?range=5d…1y` | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
 | **Adding a ticker** | `spark?range=1y` | Immediate backfill, so the sparkline is populated by the time the card appears |
 
 Browser startup and the manual refresh also run a gap check followed by a quote
@@ -162,13 +162,19 @@ read. It is written with an **upsert keyed by date**, never an append, so a
 missed day, a double-fired alarm, and a manual refresh all converge to the same
 series instead of duplicating it.
 
-Two known inefficiencies, both small and neither yet fixed:
+**Requests are sized to the gap, and skipped when there is none.** A symbol one
+trading day behind is topped up with `range=5d` — 8 KB across a seven-symbol
+watchlist, against 38.9 KB for `range=1y`. Stale symbols are grouped by the
+window they need, so the steady-state daily sync is a single `5d` request no
+matter how many tickers are on the list, and only a genuinely long absence
+widens it. Under-fetching would leave a silent hole in the series, so each
+threshold sits well inside its window; over-fetching only costs bytes.
 
-- The daily gap-fill asks for `range=1y` to append a single day's bar. Nothing
-  is lost — the upsert merges by date — but `range=5d` would carry ~⅓ the bytes.
-- Editing a target price or removing a ticker also triggers a quote fetch,
-  because both go through `refreshQuotes()`. Neither needs a fresh price; both
-  want a local re-join of what is already stored.
+**Not every change needs a quote.** Editing a target price or removing a ticker
+goes through `TickerService.rebuild()`, which re-joins the watchlist and stored
+history onto the prices already in the snapshot without touching the network. A
+target is the user's own number: it changes which side of the line a row falls
+on, not what the market says.
 
 #### Planned: configurable refresh
 

@@ -69,13 +69,15 @@ export class MessageRouter {
         await this.watchlist.remove(request.symbol);
         // Reclaim the series immediately; nothing references it any more.
         await this.history.remove(request.symbol);
-        return { ok: true, snapshot: await this.ticker.refreshQuotes() };
+        // Dropping a row needs no fresh prices for the rows that remain.
+        return { ok: true, snapshot: await this.ticker.rebuild() };
       }
 
       case 'SET_TARGET': {
         await this.watchlist.setTarget(request.symbol, request.targetPrice);
-        // Cheap: re-joins stored bars and prices, no network call.
-        return { ok: true, snapshot: await this.ticker.refreshQuotes() };
+        // A target is the user's own number; it changes which side of the line
+        // the row falls on, not what the market says. Re-join locally.
+        return { ok: true, snapshot: await this.ticker.rebuild() };
       }
 
       case 'REFRESH_NOW': {

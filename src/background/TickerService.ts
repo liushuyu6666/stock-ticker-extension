@@ -36,13 +36,13 @@ export class TickerService {
     }
 
     const symbols = entries.map((entry) => entry.symbol);
-    const bars = await this.history.getMany(symbols);
 
     try {
       const quotes = await this.provider.fetchQuotes(symbols);
       await this.watchlist.refreshLabels(
         new Map([...quotes].map(([symbol, quote]) => [symbol, { name: quote.name, exchange: quote.exchange }]))
       );
+      const bars = await this.history.getMany(symbols);
       const rows = entries.map((entry) =>
         buildRow(entry, quotes.get(entry.symbol) ?? null, bars.get(entry.symbol) ?? [])
       );
@@ -50,16 +50,32 @@ export class TickerService {
     } catch (error) {
       // Keep the bar populated with the last good prices rather than blanking it.
       const previous = await this.readSnapshot();
-      const previousPrices = new Map(previous.rows.map((row) => [row.symbol, row.price]));
-      const rows = entries.map((entry) =>
-        buildRow(entry, null, bars.get(entry.symbol) ?? [], previousPrices.get(entry.symbol) ?? null)
+      return this.publish(
+        await this.join(previous, error instanceof Error ? error.message : String(error))
       );
-      return this.publish({
-        rows,
-        updatedAt: previous.updatedAt,
-        error: error instanceof Error ? error.message : String(error)
-      });
     }
+  }
+
+  /**
+   * Republishes from stored data alone — no network call. Edits that change
+   * what is displayed without invalidating any price (a new target, a removed
+   * ticker) go through here, since a fresh quote would tell them nothing they
+   * do not already have.
+   */
+  async rebuild(): Promise<TickerSnapshot> {
+    const previous = await this.readSnapshot();
+    return this.publish(await this.join(previous, previous.error));
+  }
+
+  /** Joins the current watchlist and stored history onto known prices. */
+  private async join(previous: TickerSnapshot, error: string | null): Promise<TickerSnapshot> {
+    const entries = await this.watchlist.list();
+    const bars = await this.history.getMany(entries.map((entry) => entry.symbol));
+    const prices = new Map(previous.rows.map((row) => [row.symbol, row.price]));
+    const rows = entries.map((entry) =>
+      buildRow(entry, null, bars.get(entry.symbol) ?? [], prices.get(entry.symbol) ?? null)
+    );
+    return { rows, updatedAt: previous.updatedAt, error };
   }
 
   /**
