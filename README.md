@@ -247,14 +247,20 @@ since `chrome.alarms.create` on an existing name replaces the schedule.
 
 ## Storage
 
-`chrome.storage.local`, and four measures keep it honest. Measured on a 7-symbol
+`chrome.storage.local`, and five measures keep it honest. Measured on a 7-symbol
 watchlist against real Yahoo data:
 
-| | before | after |
+| | originally | now |
 |---|---|---|
-| `history:*` keys | 103 KB | **67 KB** (−35%) |
+| `history:*` keys | 103 KB | **18.4 KB** (−82%) |
 | `cache:snapshot` | 13.0 KB | **4.3 KB** (−67%) |
-| total | 116 KB | **71 KB** |
+| total | 116 KB | **22.7 KB** (−80%) |
+
+The quota is **per extension**, not shared with other extensions or with any
+website: `chrome.storage.local` allows 10 MB, so the figure above is 0.2% of it.
+`chrome.storage.sync` — which holds only the watchlist — is far tighter at 100 KB
+with a documented write-rate limit, which is why label writes are skipped unless
+something actually changed.
 
 1. **The snapshot stores a render payload, not a second copy of history.** It
    used to carry every symbol's full close series — a duplicate of the history
@@ -273,6 +279,17 @@ watchlist against real Yahoo data:
 4. **Pruning runs on every history sync**, not only when a backfill happened, so
    a series orphaned by a removal that raced the worker's suspension is
    reclaimed on the next pass rather than lingering indefinitely.
+5. **Series are stored as a start date plus whole-day offsets**, not as one
+   `{date, close}` object per bar. Repeating a key name and a full ISO string on
+   every one of ~250 bars cost about three quarters of the payload: a year of
+   closes drops from 9.3 KB to 2.7 KB. Offsets are *not* assumed contiguous —
+   weekends and holidays simply produce a jump — and the decoded shape callers
+   see is unchanged, so the encoding stays private to `LocalHistoryStore`.
+   `lastBarDate` reads the last offset straight off the encoded form rather than
+   rebuilding a few hundred objects to look at one, which matters because the
+   hourly gap check asks it for every symbol. A `v` marker tags the format, and
+   the legacy array still decodes, so an existing install migrates silently on
+   each symbol's next upsert.
 
 One thing deliberately *not* done: rounding stored closes. The `spark` endpoint
 already returns short decimals (`232.14`), unlike the `chart` endpoint
