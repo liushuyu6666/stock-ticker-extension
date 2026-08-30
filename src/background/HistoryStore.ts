@@ -11,5 +11,7 @@ export interface HistoryStore {
   upsert(symbol: string, bars: DailyBar[]): Promise<void>;
   /** YYYY-MM-DD of the newest stored bar, or null when the symbol is unknown. */
   lastBarDate(symbol: string): Promise<string | null>;
+  /** Deletes one symbol's series outright, reclaiming its storage. */
+  remove(symbol: string): Promise<void>;
   prune(keepSymbols: string[]): Promise<void>;
 }

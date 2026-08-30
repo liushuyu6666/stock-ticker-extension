@@ -17,7 +17,10 @@ export class StockCard {
     prices.textContent = `${format(row.price)} / ${format(row.targetPrice)}`;
 
     card.append(symbol, prices, createSparkline(row.closes, row.trend));
-    card.title = `${row.symbol} — current ${format(row.price)}, target ${format(row.targetPrice)}`;
+    // The bar has no room for the full name, so the tooltip carries it — the
+    // whole point of storing it is not having to decode a ticker from memory.
+    const identity = row.exchange ? `${row.name} · ${row.exchange}` : row.name;
+    card.title = `${row.symbol} — ${identity}\ncurrent ${format(row.price)}, target ${format(row.targetPrice)}\nClick to configure`;
     return card;
   }
 }

@@ -1,4 +1,4 @@
-import type { TickerSnapshot, WatchlistEntry } from './types';
+import type { SymbolMatch, TickerSnapshot, WatchlistEntry } from './types';
 
 export const STORAGE_KEYS = {
   watchlist: 'watchlist',
@@ -11,12 +11,17 @@ export const STORAGE_KEYS = {
 export type Request =
   | { type: 'GET_SNAPSHOT' }
   | { type: 'GET_WATCHLIST' }
-  | { type: 'SAVE_WATCHLIST'; entries: WatchlistEntry[] }
-  | { type: 'REFRESH_NOW' };
+  | { type: 'SEARCH_SYMBOLS'; query: string }
+  | { type: 'ADD_SYMBOL'; match: SymbolMatch; targetPrice: number }
+  | { type: 'REMOVE_SYMBOL'; symbol: string }
+  | { type: 'SET_TARGET'; symbol: string; targetPrice: number }
+  | { type: 'REFRESH_NOW' }
+  | { type: 'OPEN_CONFIG' };
 
 export type Response =
   | { ok: true; snapshot: TickerSnapshot }
   | { ok: true; entries: WatchlistEntry[] }
+  | { ok: true; matches: SymbolMatch[] }
   | { ok: true }
   | { ok: false; error: string };
 

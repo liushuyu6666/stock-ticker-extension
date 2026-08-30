@@ -35,6 +35,11 @@ export class TickerClient {
     await sendMessage({ type: 'REFRESH_NOW' });
   }
 
+  /** The worker opens the tab, since a content script cannot use chrome.tabs. */
+  async openConfig(): Promise<void> {
+    await sendMessage({ type: 'OPEN_CONFIG' });
+  }
+
   private async pull(): Promise<void> {
     try {
       const response = await sendMessage({ type: 'GET_SNAPSHOT' });

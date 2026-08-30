@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Stock Ticker — Configuration</title>
+    <link rel="stylesheet" href="config.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">Stock Ticker</span>
+        </div>
+        <div id="sidebar"></div>
+        <p class="sidebar-foot">Prices via Yahoo Finance, delayed ~15 min.</p>
+      </aside>
+
+      <main class="main">
+        <header class="main-header">
+          <div class="main-heading">
+            <h1 class="main-title">Tickers</h1>
+            <p id="main-count" class="main-count"></p>
+          </div>
+          <div id="search"></div>
+        </header>
+        <div id="status" class="status"></div>
+        <div id="main-body" class="main-body"></div>
+      </main>
+    </div>
+    <script src="config.js"></script>
+  </body>
+</html>

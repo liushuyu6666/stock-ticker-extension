@@ -1,13 +1,13 @@
 import { STORAGE_KEYS } from '../shared/messages';
-import type { TickerRow, TickerSnapshot, WatchlistEntry } from '../shared/types';
+import type { DailyBar, Quote, TickerRow, TickerSnapshot, WatchlistEntry } from '../shared/types';
 import type { HistoryStore } from './HistoryStore';
 import type { QuoteProvider } from './QuoteProvider';
 import type { WatchlistRepository } from './WatchlistRepository';
 
 /**
  * Orchestrator. Joins live quotes, stored history, and user targets into the
- * one shape the UI renders, and owns the red/green rule. Depends only on the
- * three abstractions above — never on Yahoo or on a storage backend directly.
+ * one shape every surface renders, and owns the red/green rule. Depends only on
+ * the three abstractions above — never on Yahoo or on a storage backend.
  */
 export class TickerService {
   constructor(
@@ -39,8 +39,11 @@ export class TickerService {
 
     try {
       const quotes = await this.provider.fetchQuotes(symbols);
+      await this.watchlist.refreshLabels(
+        new Map([...quotes].map(([symbol, quote]) => [symbol, { name: quote.name, exchange: quote.exchange }]))
+      );
       const rows = entries.map((entry) =>
-        buildRow(entry, quotes.get(entry.symbol)?.price ?? null, bars.get(entry.symbol) ?? [])
+        buildRow(entry, quotes.get(entry.symbol) ?? null, bars.get(entry.symbol) ?? [])
       );
       return this.publish({ rows, updatedAt: Date.now(), error: null });
     } catch (error) {
@@ -48,7 +51,7 @@ export class TickerService {
       const previous = await this.readSnapshot();
       const previousPrices = new Map(previous.rows.map((row) => [row.symbol, row.price]));
       const rows = entries.map((entry) =>
-        buildRow(entry, previousPrices.get(entry.symbol) ?? null, bars.get(entry.symbol) ?? [])
+        buildRow(entry, null, bars.get(entry.symbol) ?? [], previousPrices.get(entry.symbol) ?? null)
       );
       return this.publish({
         rows,
@@ -59,8 +62,8 @@ export class TickerService {
   }
 
   /**
-   * Writing the snapshot to storage is also how every mounted bar learns about
-   * it — they subscribe to storage.onChanged instead of holding a port open.
+   * Writing the snapshot to storage is also how every mounted surface learns
+   * about it — they subscribe to storage.onChanged instead of holding a port.
    */
   private async publish(snapshot: TickerSnapshot): Promise<TickerSnapshot> {
     await chrome.storage.local.set({ [STORAGE_KEYS.snapshot]: snapshot });
@@ -68,9 +71,18 @@ export class TickerService {
   }
 }
 
-function buildRow(entry: WatchlistEntry, price: number | null, bars: { close: number }[]): TickerRow {
+function buildRow(
+  entry: WatchlistEntry,
+  quote: Quote | null,
+  bars: DailyBar[],
+  fallbackPrice: number | null = null
+): TickerRow {
+  const price = quote?.price ?? fallbackPrice;
   return {
     symbol: entry.symbol,
+    // The quote's label is fresher than the stored one when both are present.
+    name: quote?.name || entry.name || entry.symbol,
+    exchange: quote?.exchange || entry.exchange || '',
     price,
     targetPrice: entry.targetPrice,
     // Above target reads as red, at-or-below as green.

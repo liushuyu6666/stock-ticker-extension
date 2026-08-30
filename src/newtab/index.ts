@@ -24,7 +24,7 @@ function mount(): void {
 
   document.getElementById('open-options')?.addEventListener('click', (event) => {
     event.preventDefault();
-    void chrome.runtime.openOptionsPage();
+    void client.openConfig();
   });
 }
 

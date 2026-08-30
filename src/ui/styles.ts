@@ -11,6 +11,7 @@ export const TICKER_CSS = `
 
 .bar {
   box-sizing: border-box;
+  cursor: pointer;
   width: 100%;
   height: 28px;
   display: flex;
@@ -21,7 +22,10 @@ export const TICKER_CSS = `
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   color: #1f2328;
   user-select: none;
-  cursor: default;
+}
+
+.bar:hover {
+  background: #f1eee9;
 }
 
 .viewport {

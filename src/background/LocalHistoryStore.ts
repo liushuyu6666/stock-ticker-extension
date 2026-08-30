@@ -54,6 +54,14 @@ export class LocalHistoryStore implements HistoryStore {
     return bars.length > 0 ? bars[bars.length - 1].date : null;
   }
 
+  async remove(symbol: string): Promise<void> {
+    await chrome.storage.local.remove(STORAGE_KEYS.history(symbol));
+    const tracked = await this.trackedSymbols();
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.historyIndex]: tracked.filter((entry) => entry !== symbol)
+    });
+  }
+
   /** Drops series for symbols the user has removed from the watchlist. */
   async prune(keepSymbols: string[]): Promise<void> {
     const keep = new Set(keepSymbols);

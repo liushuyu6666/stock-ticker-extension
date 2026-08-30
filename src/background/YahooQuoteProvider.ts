@@ -29,7 +29,9 @@ export class YahooQuoteProvider implements QuoteProvider {
           symbol: entry.symbol,
           price,
           currency: typeof meta.currency === 'string' ? meta.currency : 'USD',
-          marketTime: typeof meta.regularMarketTime === 'number' ? meta.regularMarketTime : 0
+          marketTime: typeof meta.regularMarketTime === 'number' ? meta.regularMarketTime : 0,
+          name: pickString(meta.longName, meta.shortName) ?? entry.symbol,
+          exchange: pickString(meta.fullExchangeName, meta.exchangeName) ?? ''
         });
       }
     }
@@ -82,6 +84,13 @@ export class YahooQuoteProvider implements QuoteProvider {
     }
     return results as SparkEntry[];
   }
+}
+
+function pickString(...candidates: unknown[]): string | null {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+  }
+  return null;
 }
 
 interface SparkEntry {

@@ -11,9 +11,9 @@ const TREND_COLORS: Record<Trend, string> = {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /**
- * Chosen by rendering a year of real closes at 14/20/28/40/64 points: above ~28
- * the line reads as noise at 46px wide, below it the year's actual shape starts
- * collapsing. This is the "simplified" in a simplified trend line.
+ * Default budget, for the 46px bar sparkline. Chosen by rendering a year of real
+ * closes at 14/20/28/40/64: above ~28 the line reads as noise at that width,
+ * below it the year's shape starts collapsing. Larger sizes pass their own.
  */
 const MAX_POINTS = 28;
 const VERTICAL_PADDING = 1.5;
@@ -25,9 +25,10 @@ const VERTICAL_PADDING = 1.5;
 export function sparklinePath(
   closes: number[],
   width = SPARKLINE_WIDTH,
-  height = SPARKLINE_HEIGHT
+  height = SPARKLINE_HEIGHT,
+  maxPoints = MAX_POINTS
 ): string {
-  const points = downsample(closes, MAX_POINTS);
+  const points = downsample(closes, maxPoints);
   if (points.length === 0) return '';
   if (points.length === 1) {
     const mid = round(height / 2);
@@ -55,18 +56,36 @@ export function sparklinePath(
     .join(' ');
 }
 
+export interface SparklineSize {
+  width: number;
+  height: number;
+  /** Omit the width/height attributes so CSS can stretch the svg. */
+  fluid?: boolean;
+  /**
+   * Point budget for this size. Not derived from width: the legible density is
+   * sub-linear, so 46px wants 28 points while 260px wants ~70, not ~158.
+   */
+  points?: number;
+}
+
 /** Builds the <svg> a card renders. No axes, labels, grid, or point markers. */
-export function createSparkline(closes: number[], trend: Trend): SVGSVGElement {
+export function createSparkline(
+  closes: number[],
+  trend: Trend,
+  size: SparklineSize = { width: SPARKLINE_WIDTH, height: SPARKLINE_HEIGHT }
+): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'sparkline');
-  svg.setAttribute('viewBox', `0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`);
-  svg.setAttribute('width', String(SPARKLINE_WIDTH));
-  svg.setAttribute('height', String(SPARKLINE_HEIGHT));
+  svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
+  if (!size.fluid) {
+    svg.setAttribute('width', String(size.width));
+    svg.setAttribute('height', String(size.height));
+  }
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('preserveAspectRatio', 'none');
 
   const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', sparklinePath(closes));
+  path.setAttribute('d', sparklinePath(closes, size.width, size.height, size.points ?? MAX_POINTS));
   path.setAttribute('fill', 'none');
   path.setAttribute('stroke', TREND_COLORS[trend]);
   path.setAttribute('stroke-width', '1');

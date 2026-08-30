@@ -39,13 +39,33 @@ will overlap it. There is no generic fix; those sites need a per-domain tweak.
 
 ## Configuration
 
-Right-click the extension icon → **Options** (or *Edit watchlist* on the new
-tab). Symbols and targets are stored in `chrome.storage.sync`, so they follow
-your Chrome profile.
+**Click the bar** — anywhere on it — and the config page opens in a new tab.
+The extension icon and the new tab's *Configure tickers* link go to the same
+place.
+
+The page is a sidebar plus a main panel. The sidebar holds one section today
+(*Tickers*, with a live count); it is built from a list so the next section is
+an array entry rather than a rewrite.
+
+Each ticker is a card carrying its symbol, **full company name and exchange**
+— so a card is identifiable without decoding the ticker from memory — the
+current price, how far it sits from target in both absolute and percentage
+terms, a year-long sparkline, and an editable target. The target commits on
+blur or Enter rather than per keystroke, so typing `1` on the way to `180` does
+not write storage or repaint the card mid-edit.
+
+**Adding** goes through the search box at the top right: type a symbol or a
+company name, pick from at most seven matches (each showing symbol, long name
+and exchange), and confirm. The year of history is fetched immediately, so the
+sparkline is populated by the time the card appears.
+
+**Removing** asks for confirmation, then deletes the ticker *and its stored
+history*, reclaiming the space rather than orphaning a series no one reads.
 
 Targets are yours to set. Analyst consensus targets sit behind an authenticated
 Yahoo endpoint that breaks often, and a target you chose yourself makes the
-red/green a statement about your own thesis.
+red/green a statement about your own thesis. Symbols, targets and labels live in
+`chrome.storage.sync`, so the watchlist follows your Chrome profile.
 
 ## How it works
 
@@ -60,18 +80,26 @@ background (service worker)
         ▼                        ▼                  ▼
    QuoteProvider            HistoryStore     WatchlistRepository
    └ YahooQuoteProvider     └ LocalHistoryStore
+   SymbolSearch
+   └ YahooSymbolSearch
   MessageRouter  ◄── chrome.runtime.onMessage
         ▲
         │  request / storage.onChanged
-  ┌─────┴─────────────────┐   ┌──────────────┐
-  │ content script │ new tab │ │ options page │
-  │   TickerClient          │ │   OptionsApp │
-  │   TickerBar → StockCard → sparkline      │
-  └─────────────────────────┘ └──────────────┘
+  ┌─────┴──────────────────┐   ┌───────────────────────────────┐
+  │ content script │new tab │   │ config page                   │
+  │   TickerClient          │   │   ConfigApp                   │
+  │   TickerBar → StockCard │   │    ├ SidebarNav               │
+  │            → sparkline  │   │    ├ SymbolSearchBox          │
+  └─────────────────────────┘   │    ├ TickerGrid → TickerCard  │
+                                │    └ ConfirmDialog            │
+                                └───────────────────────────────┘
 ```
 
 `TickerService` depends only on the three interfaces, never on Yahoo or on a
-storage backend directly — which is what makes either one swappable.
+storage backend directly — which is what makes either one swappable. The UI
+classes never import a provider: `TickerBar`/`TickerCard` are pure renderers
+over `TickerRow`, and `TickerClient`/`ConfigApp` are the only things that know
+the worker exists.
 
 ### Data source
 
@@ -86,6 +114,19 @@ No API key and no quota headers, but it is **undocumented** — Yahoo's official
 v7 `quote` endpoint already returns `Unauthorized` without a crumb, and `spark`
 could follow. That risk is the reason `QuoteProvider` is an interface: a
 Finnhub or Twelve Data implementation only has to satisfy two methods.
+
+Symbol lookup for the add box uses the sibling search endpoint, which honours
+`quotesCount` exactly — so the seven-result cap is enforced upstream rather than
+by slicing a longer list:
+
+```
+https://query1.finance.yahoo.com/v1/finance/search?q=msft&quotesCount=7&newsCount=0
+```
+
+The spark payload's `meta` already carries `longName` and `fullExchangeName`, so
+stored labels refresh for free on every quote poll. `refreshLabels` only writes
+when something actually changed — otherwise the minute-by-minute poll would burn
+the `chrome.storage.sync` write quota.
 
 Prices are delayed roughly 15 minutes on most exchanges.
 
@@ -145,9 +186,13 @@ that day.
 
 ## Design notes
 
-- **Sparkline density** is capped at 28 points. Rendered against a year of real
-  closes at 14/20/28/40/64, anything above ~28 reads as noise at 46px wide and
-  anything below starts collapsing the year's actual shape.
+- **Sparkline density** is an explicit budget per size, not a function of width:
+  the legible density is sub-linear. The 46px bar uses 28 points and the 260px
+  card uses 70, each picked by rendering a year of real closes across five
+  budgets and taking the last one that still reads as a trend line rather than a
+  scratchy trace.
+- **Search is debounced at 220ms and guarded by a monotonic query token**, so a
+  slow reply for `ms` cannot overwrite the results already shown for `msft`.
 - **Cards have no separators**, per spec. Adding a hairline is one rule in
   `src/ui/styles.ts`.
 - **The marquee only runs when the content overflows**, duplicating the card
