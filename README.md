@@ -171,14 +171,25 @@ from a content script would fail.
 
 Four triggers, and nothing else reaches the network.
 
-| Trigger | Request | Notes |
-|---|---|---|
-| **Typing in the search box** | `v1/finance/search` | Debounced 220 ms — one call per typing *pause*, not per keystroke. Seven results, capped upstream by `quotesCount` |
-| **Every minute** | `spark?range=1d` | Price only. Fires **only while a bar is on screen**: if nothing has asked for a snapshot in 5 minutes, the alarm runs and does nothing |
-| **Every hour** | `spark?range=5d…1y` | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
-| **Adding a ticker** | `spark?range=1y` | Immediate backfill, so the sparkline is populated by the time the card appears |
-| **"View all" / Enter** | `v1/finance/lookup` | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row, so the results page needs no request per row |
-| **Opening a ticker's details** | `spark?range=1y` | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist. The hover crosshair then costs nothing: it reads the series already in hand |
+| Trigger | Request | Stored afterwards? | Notes |
+|---|---|---|---|
+| **Typing in the search box** | `v1/finance/search` | **No** — lives in the dropdown's DOM, gone when it closes | Debounced 220 ms — one call per typing *pause*, not per keystroke. Seven results, capped upstream by `quotesCount` |
+| **Every minute** | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. Fires **only while a bar is on screen**: if nothing has asked for a snapshot in 5 minutes, the alarm runs and does nothing |
+| **Every hour** | `spark?range=5d…1y` | **Yes, merged.** Bars upserted by date into `history:<SYMBOL>` (local), capped at 260 | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
+| **Adding a ticker** | `spark?range=1y` | **Yes, merged** — same `history:<SYMBOL>` path, plus the watchlist entry in sync | Immediate backfill, so the sparkline is populated by the time the card appears |
+| **"View all" / Enter** | `v1/finance/lookup` | **No** — held in memory by the results view so the exchange filter can work without refetching, discarded on navigating away | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row, so the results page needs no request per row |
+| **Opening a ticker's details** | `spark?range=1y` | **No** — rendered and discarded, including its full-resolution year | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist. The hover crosshair then costs nothing: it reads the series already in hand |
+
+Two things that column makes plain:
+
+- **Only the two scheduled calls persist anything.** Everything driven by a click
+  or a keystroke — search, lookup, preview — is read-only against storage, which
+  is why browsing around the config page cannot grow the extension's footprint.
+- **The detail dialog throws away a full year it just downloaded.** It could
+  upsert those bars into `history:<SYMBOL>`, but only for a symbol already on the
+  watchlist, and the hourly sync maintains that series anyway. Writing there
+  would mean a click-driven path competing with the scheduled one for the same
+  keys, which is not worth the saving.
 
 Browser startup and the manual refresh also run a gap check followed by a quote
 poll, on the same two code paths.
