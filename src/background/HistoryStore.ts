@@ -6,7 +6,6 @@ import type { DailyBar } from '../shared/types';
  * MV3 has no TCP sockets) can be dropped in without touching TickerService.
  */
 export interface HistoryStore {
-  get(symbol: string): Promise<DailyBar[]>;
   getMany(symbols: string[]): Promise<Map<string, DailyBar[]>>;
   /** Merge bars in, keyed by date. Idempotent — safe to re-run any day. */
   upsert(symbol: string, bars: DailyBar[]): Promise<void>;

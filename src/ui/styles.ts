@@ -3,7 +3,7 @@
  * shadow root and linked into the new-tab and options pages.
  */
 export const TICKER_CSS = `
-:host, .stock-ticker-root {
+:host {
   all: initial;
   display: block;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;

@@ -10,7 +10,7 @@ export class LocalHistoryStore implements HistoryStore {
   /** Roughly one trading year plus slack, so the series never grows unbounded. */
   private static readonly MAX_BARS = 400;
 
-  async get(symbol: string): Promise<DailyBar[]> {
+  private async get(symbol: string): Promise<DailyBar[]> {
     const key = STORAGE_KEYS.history(symbol);
     const stored = await chrome.storage.local.get(key);
     const bars = stored[key];

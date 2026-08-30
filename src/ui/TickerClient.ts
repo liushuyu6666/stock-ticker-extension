@@ -11,7 +11,6 @@ export class TickerClient {
   private static readonly HEARTBEAT_MS = 60_000;
 
   private listener: ((snapshot: TickerSnapshot) => void) | null = null;
-  private heartbeat: number | null = null;
 
   subscribe(listener: (snapshot: TickerSnapshot) => void): void {
     this.listener = listener;
@@ -24,18 +23,12 @@ export class TickerClient {
     });
 
     void this.pull();
-    this.heartbeat = setInterval(() => void this.pull(), TickerClient.HEARTBEAT_MS) as unknown as number;
+    setInterval(() => void this.pull(), TickerClient.HEARTBEAT_MS);
 
     // A backgrounded tab should not keep the worker awake fetching prices.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') void this.pull();
     });
-  }
-
-  stop(): void {
-    if (this.heartbeat !== null) clearInterval(this.heartbeat);
-    this.heartbeat = null;
-    this.listener = null;
   }
 
   async refreshNow(): Promise<void> {

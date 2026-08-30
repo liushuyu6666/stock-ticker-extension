@@ -108,6 +108,29 @@ History is written with an **upsert keyed by date**, never an append. A missed
 day, a double-fired alarm, and a manual refresh therefore all converge to the
 same series instead of duplicating it.
 
+#### Planned: configurable refresh
+
+Both intervals above are hard-coded constants today —
+`RefreshScheduler.QUOTE_PERIOD_MINUTES` and `HISTORY_PERIOD_MINUTES`. A later
+section on the options page will expose them, turning the cadences into
+settings rather than constants:
+
+| Setting | Today | Planned |
+|---|---|---|
+| Quote poll interval | 1 min, hard-coded | user-chosen, 1 min and up (Chrome clamps anything lower) |
+| History gap check | every 60 min, hard-coded | user-chosen interval |
+| Consumer idle timeout | 5 min, hard-coded | user-chosen, or off |
+
+There is deliberately **no wall-clock schedule** among these — no "fetch at
+16:15 ET". A fixed time assumes the browser happens to be running at that
+moment, and silently skips the day when it isn't. The gap check asks a question
+that survives a weekend, a closed laptop, or a browser quit at 16:15, so it is
+the mechanism rather than a fallback behind one.
+
+Settings belong in `chrome.storage.sync` beside the watchlist, and
+`RefreshScheduler.install()` needs to re-create its alarms whenever they change,
+since `chrome.alarms.create` on an existing name replaces the schedule.
+
 ### Storage
 
 `chrome.storage.local`. A year of daily closes is ~250 floats, so a realistic

@@ -15,10 +15,10 @@ export class RefreshScheduler {
   /** Chrome clamps alarm periods to one minute. */
   private static readonly QUOTE_PERIOD_MINUTES = 1;
   /**
-   * Hourly *gap check*, not a fixed 16:15 ET cron: the browser is frequently
-   * closed at any given wall-clock time, so asking "is my newest bar older than
-   * the last trading day?" is the only cadence that self-heals after a weekend
-   * or a sleeping laptop.
+   * An hourly *gap check* — "is my newest bar older than the last trading day?"
+   * A wall-clock schedule would assume the browser happens to be running at that
+   * moment; asking about the gap instead self-heals after a weekend or a
+   * sleeping laptop, whenever the browser next wakes.
    */
   private static readonly HISTORY_PERIOD_MINUTES = 60;
   /** Stop polling prices once no bar has asked for a snapshot recently. */

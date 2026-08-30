@@ -52,11 +52,7 @@ function mount(): void {
  * a generic fix is not possible, so those need a per-site tweak.
  */
 function pushPageDown(): void {
-  const root = document.documentElement;
-  root.style.setProperty('margin-top', `${BAR_HEIGHT_PX}px`, 'important');
-  // Some resets pin html to 100%, which would push a scrollbar's worth of page
-  // off the bottom once the margin is added.
-  root.style.setProperty('box-sizing', 'border-box');
+  document.documentElement.style.setProperty('margin-top', `${BAR_HEIGHT_PX}px`, 'important');
 }
 
 if (document.readyState === 'loading') {

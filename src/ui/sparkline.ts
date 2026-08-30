@@ -1,10 +1,10 @@
 import type { Trend } from '../shared/types';
 
-export const SPARKLINE_WIDTH = 46;
-export const SPARKLINE_HEIGHT = 14;
+const SPARKLINE_WIDTH = 46;
+const SPARKLINE_HEIGHT = 14;
 
 /** Above target reads red, at or below target reads green. */
-export const TREND_COLORS: Record<Trend, string> = {
+const TREND_COLORS: Record<Trend, string> = {
   above: '#d93025',
   atOrBelow: '#188038'
 };
