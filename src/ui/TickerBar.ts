@@ -28,6 +28,12 @@ export class TickerBar {
 
     this.viewport.append(this.track);
     this.bar.append(this.viewport);
+
+    // The number of copies needed depends on the viewport width, so a resize
+    // (or the window being maximised) has to recompute it or a gap opens up.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => this.scheduleMarquee()).observe(this.viewport);
+    }
   }
 
   get element(): HTMLElement {
@@ -40,32 +46,50 @@ export class TickerBar {
     if (next === this.signature) return;
     this.signature = next;
 
+    this.track.classList.remove('is-scrolling');
     this.track.replaceChildren();
     if (rows.length === 0) return;
 
-    const primary = buildGroup(rows);
-    // The duplicate is what makes the loop seamless; hide it from assistive tech.
-    const duplicate = buildGroup(rows);
-    duplicate.setAttribute('aria-hidden', 'true');
-    this.track.append(primary, duplicate);
-
-    // Measurement has to wait for layout, or every width reads as zero.
-    requestAnimationFrame(() => this.applyMarquee(primary));
+    // Only the first group is built here. How many copies follow depends on
+    // measurements that are not available until this one has been laid out.
+    this.track.append(buildGroup(rows));
+    this.scheduleMarquee();
   }
 
-  private applyMarquee(group: HTMLElement): void {
+  /** Measurement has to wait for layout, or every width reads as zero. */
+  private scheduleMarquee(): void {
+    requestAnimationFrame(() => this.applyMarquee());
+  }
+
+  /**
+   * Fills the track with as many copies of the row set as the loop needs, then
+   * scrolls it by exactly one copy's width.
+   *
+   * Translating by a fixed -50% only reads as seamless when a single copy is
+   * already wider than the viewport. Below that — seven tickers on a wide
+   * monitor, say — the wrap would snap back to a half-empty strip, which is why
+   * the bar previously stalled instead of scrolling.
+   */
+  private applyMarquee(): void {
+    const group = this.track.firstElementChild as HTMLElement | null;
+    if (!group) return;
+
     const groupWidth = group.getBoundingClientRect().width;
     const viewportWidth = this.viewport.getBoundingClientRect().width;
+    // Not laid out yet (a hidden tab, say); the resize observer will call back.
+    if (groupWidth === 0) return;
 
-    // Everything fits — scrolling a full list past the eye would be noise.
-    if (groupWidth === 0 || groupWidth <= viewportWidth) {
-      this.track.classList.remove('is-scrolling');
-      this.track.style.animationDuration = '';
-      return;
+    // One copy to fill what is visible, plus one more to scroll in behind it.
+    const copies = Math.ceil(viewportWidth / groupWidth) + 1;
+    while (this.track.children.length < copies) {
+      const clone = group.cloneNode(true) as HTMLElement;
+      // Screen readers should hear the row set once, not once per copy.
+      clone.setAttribute('aria-hidden', 'true');
+      this.track.append(clone);
     }
 
-    const seconds = groupWidth / TickerBar.SPEED_PX_PER_SECOND;
-    this.track.style.animationDuration = `${seconds.toFixed(2)}s`;
+    this.track.style.setProperty('--marquee-distance', `${groupWidth}px`);
+    this.track.style.animationDuration = `${(groupWidth / TickerBar.SPEED_PX_PER_SECOND).toFixed(2)}s`;
     this.track.classList.add('is-scrolling');
   }
 }

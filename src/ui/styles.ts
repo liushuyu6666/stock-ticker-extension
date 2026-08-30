@@ -40,8 +40,9 @@ export const TICKER_CSS = `
   will-change: transform;
 }
 
-/* Two identical groups make the wrap-around seamless: by the time the first has
-   scrolled fully out, the second sits exactly where it started. */
+/* The track holds enough copies of the row set to cover the viewport plus one
+   more, and travels exactly one copy's width — so the instant it wraps, the
+   next copy is already sitting where the first began. */
 .track.is-scrolling {
   animation: stock-ticker-marquee linear infinite;
 }
@@ -103,6 +104,6 @@ export const TICKER_CSS = `
 
 @keyframes stock-ticker-marquee {
   from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  to { transform: translateX(calc(-1 * var(--marquee-distance, 100%))); }
 }
 `;

@@ -8,7 +8,7 @@ above your target, green when it is at or below it.
 AAPL  319.70 / 180.00  ‿⁀‾    MSFT  513.53 / 420.00  ‿⁀‾    …
 ```
 
-## Install
+# Install
 
 ```bash
 yarn install
@@ -21,7 +21,7 @@ choose `dist/`.
 `yarn watch` rebuilds on save; use the reload button on the extension card to
 pick changes up. `yarn check` runs the type check and a clean build.
 
-## Where the bar appears
+# Where the bar appears
 
 A Chrome extension cannot draw into browser chrome, so the strip is page
 content, mounted on two surfaces:
@@ -37,7 +37,7 @@ extensions are not permitted to run there.
 Sites with their own `position: fixed` header still paint at viewport top and
 will overlap it. There is no generic fix; those sites need a per-domain tweak.
 
-## Configuration
+# Configuration
 
 **Click the bar** — anywhere on it — and the config page opens in a new tab.
 The extension icon and the new tab's *Configure tickers* link go to the same
@@ -67,7 +67,7 @@ Yahoo endpoint that breaks often, and a target you chose yourself makes the
 red/green a statement about your own thesis. Symbols, targets and labels live in
 `chrome.storage.sync`, so the watchlist follows your Chrome profile.
 
-## How it works
+# How it works
 
 Everything that touches the network or storage runs in the service worker. The
 UI surfaces are renderers that receive rows and paint them.
@@ -101,7 +101,7 @@ classes never import a provider: `TickerBar`/`TickerCard` are pure renderers
 over `TickerRow`, and `TickerClient`/`ConfigApp` are the only things that know
 the worker exists.
 
-### Data source
+## Data source
 
 Yahoo Finance's `spark` endpoint, which returns the live price *and* the daily
 close series in one batched call:
@@ -134,7 +134,7 @@ The fetch **must** happen in the service worker. Yahoo sends no CORS headers,
 and only the worker's `host_permissions` grant bypasses that; the same call
 from a content script would fail.
 
-### Network calls
+## Network calls
 
 Four triggers, and nothing else reaches the network.
 
@@ -176,7 +176,7 @@ history onto the prices already in the snapshot without touching the network. A
 target is the user's own number: it changes which side of the line a row falls
 on, not what the market says.
 
-#### Planned: configurable refresh
+### Planned: configurable refresh
 
 Both intervals above are hard-coded constants today —
 `RefreshScheduler.QUOTE_PERIOD_MINUTES` and `HISTORY_PERIOD_MINUTES`. A later
@@ -199,7 +199,7 @@ Settings belong in `chrome.storage.sync` beside the watchlist, and
 `RefreshScheduler.install()` needs to re-create its alarms whenever they change,
 since `chrome.alarms.create` on an existing name replaces the schedule.
 
-### Storage
+## Storage
 
 `chrome.storage.local`, and four measures keep it honest. Measured on a 7-symbol
 watchlist against real Yahoo data:
@@ -240,7 +240,7 @@ is not running. It earns its place only for intraday resolution, history beyond
 Yahoo's window, or other consumers — and the interface is already in place for
 that day.
 
-## Design notes
+# Design notes
 
 - **Sparkline density** is an explicit budget per size, not a function of width:
   the legible density is sub-linear. The 46px bar uses 28 points and the 260px
