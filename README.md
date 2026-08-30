@@ -134,20 +134,41 @@ The fetch **must** happen in the service worker. Yahoo sends no CORS headers,
 and only the worker's `host_permissions` grant bypasses that; the same call
 from a content script would fail.
 
-### Refresh cadences
+### Network calls
 
-The two kinds of data age differently — a live price is stale within a minute,
-a closed day's close is never stale at all — so they run on separate clocks.
+Four triggers, and nothing else reaches the network.
 
-| Data | Cadence | Why |
+| Trigger | Request | Notes |
 |---|---|---|
-| Live price | every minute, **only while a bar is on screen** | the sole volatile field; an idle browser stops polling after 5 min |
-| Daily bars | hourly *gap check*, not a fixed daily cron | the browser is often closed at any given wall-clock time; asking "is my newest bar older than the last trading day?" self-heals after a weekend or a sleeping laptop |
-| Backfill | on demand, when a symbol is added | one `range=1y` fetch, then those bars are never refetched |
+| **Typing in the search box** | `v1/finance/search` | Debounced 220 ms — one call per typing *pause*, not per keystroke. Seven results, capped upstream by `quotesCount` |
+| **Every minute** | `spark?range=1d` | Price only. Fires **only while a bar is on screen**: if nothing has asked for a snapshot in 5 minutes, the alarm runs and does nothing |
+| **Every hour** | `spark?range=1y` | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all |
+| **Adding a ticker** | `spark?range=1y` | Immediate backfill, so the sparkline is populated by the time the card appears |
 
-History is written with an **upsert keyed by date**, never an append. A missed
-day, a double-fired alarm, and a manual refresh therefore all converge to the
-same series instead of duplicating it.
+Browser startup and the manual refresh also run a gap check followed by a quote
+poll, on the same two code paths.
+
+**The two kinds of data age differently** — a live price is stale within a
+minute, a closed day's close is never stale at all — so they run on separate
+clocks. The hourly one is deliberately a gap check rather than a wall-clock
+schedule: a fixed time assumes the browser happens to be running at that moment,
+whereas asking "is my newest bar older than the last trading day?" self-heals
+after a weekend or a sleeping laptop.
+
+**History is fetched once and then reused.** The year downloaded when a ticker
+is added is what the carousel draws for the life of that ticker; the per-minute
+poll fetches only the price and joins it against the stored series with a local
+read. It is written with an **upsert keyed by date**, never an append, so a
+missed day, a double-fired alarm, and a manual refresh all converge to the same
+series instead of duplicating it.
+
+Two known inefficiencies, both small and neither yet fixed:
+
+- The daily gap-fill asks for `range=1y` to append a single day's bar. Nothing
+  is lost — the upsert merges by date — but `range=5d` would carry ~⅓ the bytes.
+- Editing a target price or removing a ticker also triggers a quote fetch,
+  because both go through `refreshQuotes()`. Neither needs a fresh price; both
+  want a local re-join of what is already stored.
 
 #### Planned: configurable refresh
 
