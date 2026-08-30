@@ -167,7 +167,24 @@ The fetch **must** happen in the service worker. Yahoo sends no CORS headers,
 and only the worker's `host_permissions` grant bypasses that; the same call
 from a content script would fail.
 
-## Network calls
+## The three threads
+
+The three sections below follow a single chain: a **request** brings data in,
+some of it is **stored**, and what is **drawn** is downsampled from what is
+stored. Nothing is drawn at a resolution it was not stored at, and nothing is
+stored that no longer has an owner.
+
+```
+                     ── stored ──────────────────   ── derived ────────────────
+Yahoo ──request──▶   history:<SYMBOL>   ──────────▶ cache:snapshot ──▶ bar / card
+                     260 dated closes               70 closes/row       28 points
+                     permanent per ticker           disposable          never stored
+
+Yahoo ──request──▶   (nothing stored)  ─────────────────────────────▶ detail dialog
+                                                                       every session
+```
+
+## 1 · Network calls — what triggers a request, and what it leaves behind
 
 Four triggers, and nothing else reaches the network.
 
@@ -245,10 +262,33 @@ Settings belong in `chrome.storage.sync` beside the watchlist, and
 `RefreshScheduler.install()` needs to re-create its alarms whenever they change,
 since `chrome.alarms.create` on an existing name replaces the schedule.
 
-## Storage
+## 2 · Storage — what is permanent, what is disposable
 
-`chrome.storage.local`, and five measures keep it honest. Measured on a 7-symbol
-watchlist against real Yahoo data:
+Five keys, in two areas. The distinction that matters is **lifetime**: only two
+of them are authored by you or paid for with a network request, and the rest can
+be deleted at any moment without losing anything.
+
+| Key | Area | Holds | Lifetime |
+|---|---|---|---|
+| `watchlist` | sync | symbols, targets, names, exchanges | **Permanent.** The only thing you author. Follows your Chrome profile |
+| `history:<SYMBOL>` | local | up to 260 dated closes, encoded | **Permanent for as long as the ticker is on the list.** Never expires, never trimmed by age — only removing the ticker deletes it, and removal deletes it immediately |
+| `history:index` | local | which symbols have a series | **Permanent.** Bookkeeping, so a series orphaned by a removal can still be found |
+| `cache:snapshot` | local | one render payload, 70 closes per row | **Disposable.** Delete it and the next poll rebuilds it from history plus one quote fetch |
+| `meta:lastConsumerSeenAt` | local | when a bar was last on screen | **Disposable.** Worst case, one skipped poll |
+
+**What the sparklines are drawn from:** the bar and the config card both read
+`cache:snapshot` — never the history keys directly, and never the network. The
+detail dialog is the exception: it fetches its own full-resolution year and
+stores none of it, which is why it can chart a symbol you have never tracked.
+
+So a ticker's cost is bounded and self-clearing: adding one creates exactly one
+history key, and removing it deletes that key in the same operation. Nothing
+accumulates for a ticker you no longer hold.
+
+### Size
+
+Five measures keep it small. Measured on a 7-symbol watchlist against real
+Yahoo data:
 
 | | originally | now |
 |---|---|---|
@@ -303,24 +343,23 @@ is not running. It earns its place only for intraday resolution, history beyond
 Yahoo's window, or other consumers — and the interface is already in place for
 that day.
 
-# Design notes
-
-- **Search is debounced at 220ms and guarded by a monotonic query token**, so a
-  slow reply for `ms` cannot overwrite the results already shown for `msft`.
-- **Cards have no separators**, per spec. Adding a hairline is one rule in
-  `src/ui/styles.ts`.
-
-### Sparkline density
+## 3 · Sparkline density — where each chart's points come from
 
 A year is ~251 daily closes, but almost nowhere should draw all of them. Each
 size declares its own **point budget** — the series is evenly downsampled to
 that many points before the path is built.
 
-| Where | Size | Budget | Constant |
-|---|---|---|---|
-| Ticker bar card | 46 × 14 | **28** | `MAX_POINTS` (default) |
-| Config page card | 260 × 48 | **70** | `SNAPSHOT_SERIES_POINTS` |
-| Detail dialog | 435 × 108 | **400 — i.e. every session** | `DETAIL_SERIES_POINTS` |
+| Where | Size | Budget | Constant | Downsampled from |
+|---|---|---|---|---|
+| Ticker bar card | 46 × 14 | **28** | `MAX_POINTS` (default) | the snapshot's 70, at draw time |
+| Config page card | 260 × 48 | **70** | `SNAPSHOT_SERIES_POINTS` | history's 260, in `TickerService` |
+| Detail dialog | 435 × 108 | **400 — i.e. every session** | `DETAIL_SERIES_POINTS` | its own live fetch — nothing stored |
+
+Read down that last column and the chain from the top of this section reappears:
+**260 stored → 70 published → 28 drawn.** Each step is a downsample of the one
+above it, and each is lossy and one-way, which is why the durable copy has to be
+the unsampled one — you cannot append tomorrow's close to an already-sampled
+series and re-derive an honest 70.
 
 **The budget is declared, never derived from width.** The first version scaled
 it linearly, which handed the 260px card ~158 points and made it visibly
@@ -351,6 +390,13 @@ sampled points. At 436px that works out to ~1.7px per session.
 published snapshot stores, so the largest thing routinely drawn and the most
 that is kept are one constant rather than two that can drift. The detail dialog
 exceeds it only because it fetches its own full-resolution year on demand.
+
+# Design notes
+
+- **Search is debounced at 220ms and guarded by a monotonic query token**, so a
+  slow reply for `ms` cannot overwrite the results already shown for `msft`.
+- **Cards have no separators**, per spec. Adding a hairline is one rule in
+  `src/ui/styles.ts`.
 - **The marquee clones the row set** until it covers the viewport plus one copy,
   then travels exactly one copy's width — which loops seamlessly whether the
   cards overflow the screen or fall well short of it. It pauses on hover, and
