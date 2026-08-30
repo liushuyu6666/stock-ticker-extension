@@ -34,8 +34,13 @@ export interface SymbolPreview {
   fiftyTwoWeekLow: number | null;
   dayHigh: number | null;
   dayLow: number | null;
-  /** Full one-year series — richer than the snapshot's render payload. */
+  /**
+   * Full one-year series — richer than the snapshot's render payload.
+   * `dates` is parallel to `closes`: same length, same order, so the crosshair
+   * can name the day under the cursor by index alone.
+   */
   closes: number[];
+  dates: string[];
   /** Lets the dialog offer "Add" or "Remove" without a second round trip. */
   onWatchlist: boolean;
   targetPrice: number;

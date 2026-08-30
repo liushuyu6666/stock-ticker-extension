@@ -23,18 +23,26 @@ const VERTICAL_PADDING = 1.5;
  * Pure geometry: closes in, SVG path data out. Kept free of the DOM so the
  * normalisation is trivially testable.
  */
-export function sparklinePath(
+/**
+ * Where each drawn point lands, as fractions of the box. Shared with the path
+ * builder so an overlay — the detail dialog's crosshair — can sit exactly on
+ * the line without re-deriving the normalisation and drifting from it.
+ */
+export interface SparklineGeometry {
+  /** The values actually drawn, after downsampling. */
+  points: number[];
+  /** 0 at the left edge, 1 at the right. */
+  xFraction(index: number): number;
+  /** 0 at the top edge, 1 at the bottom. */
+  yFraction(index: number): number;
+}
+
+export function sparklineGeometry(
   closes: number[],
-  width = SPARKLINE_WIDTH,
-  height = SPARKLINE_HEIGHT,
-  maxPoints = MAX_POINTS
-): string {
+  maxPoints = MAX_POINTS,
+  height = SPARKLINE_HEIGHT
+): SparklineGeometry {
   const points = downsampleSeries(closes, maxPoints);
-  if (points.length === 0) return '';
-  if (points.length === 1) {
-    const mid = round(height / 2);
-    return `M 0 ${mid} L ${round(width)} ${mid}`;
-  }
 
   let min = Infinity;
   let max = -Infinity;
@@ -46,14 +54,40 @@ export function sparklinePath(
   const usable = height - VERTICAL_PADDING * 2;
   // A flat year would divide by zero; draw it down the middle instead.
   const span = max - min;
-  const yFor = (value: number): number =>
-    span === 0
-      ? height / 2
-      : VERTICAL_PADDING + (1 - (value - min) / span) * usable;
 
-  const step = width / (points.length - 1);
+  return {
+    points,
+    // A single point has no span to sit along, so it centres.
+    xFraction: (index) => (points.length < 2 ? 0.5 : index / (points.length - 1)),
+    yFraction: (index) => {
+      if (points.length === 0 || span === 0) return 0.5;
+      const y = VERTICAL_PADDING + (1 - (points[index] - min) / span) * usable;
+      return y / height;
+    }
+  };
+}
+
+export function sparklinePath(
+  closes: number[],
+  width = SPARKLINE_WIDTH,
+  height = SPARKLINE_HEIGHT,
+  maxPoints = MAX_POINTS
+): string {
+  const geometry = sparklineGeometry(closes, maxPoints, height);
+  const { points } = geometry;
+  if (points.length === 0) return '';
+  if (points.length === 1) {
+    const mid = round(height / 2);
+    return `M 0 ${mid} L ${round(width)} ${mid}`;
+  }
+
   return points
-    .map((value, index) => `${index === 0 ? 'M' : 'L'} ${round(index * step)} ${round(yFor(value))}`)
+    .map(
+      (_, index) =>
+        `${index === 0 ? 'M' : 'L'} ${round(geometry.xFraction(index) * width)} ${round(
+          geometry.yFraction(index) * height
+        )}`
+    )
     .join(' ');
 }
 

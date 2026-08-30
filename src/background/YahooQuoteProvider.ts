@@ -78,12 +78,22 @@ export class YahooQuoteProvider implements QuoteProvider {
       );
     }
 
+    // Filtered as pairs, not independently: dropping a halted day's close
+    // without dropping its timestamp would shift every later date by one.
     const stamps = response?.timestamp;
     const rawCloses = response?.indicators?.quote?.[0]?.close;
-    const closes: number[] =
-      Array.isArray(stamps) && Array.isArray(rawCloses)
-        ? rawCloses.filter((close): close is number => typeof close === 'number' && Number.isFinite(close))
-        : [];
+    const closes: number[] = [];
+    const dates: string[] = [];
+    if (Array.isArray(stamps) && Array.isArray(rawCloses)) {
+      for (let i = 0; i < stamps.length; i += 1) {
+        const close = rawCloses[i];
+        const stamp = stamps[i];
+        if (typeof close !== 'number' || !Number.isFinite(close)) continue;
+        if (typeof stamp !== 'number') continue;
+        closes.push(close);
+        dates.push(toIsoDate(stamp));
+      }
+    }
 
     return {
       symbol,
@@ -96,7 +106,8 @@ export class YahooQuoteProvider implements QuoteProvider {
       fiftyTwoWeekLow: pickNumber(meta.fiftyTwoWeekLow),
       dayHigh: pickNumber(meta.regularMarketDayHigh),
       dayLow: pickNumber(meta.regularMarketDayLow),
-      closes
+      closes,
+      dates
     };
   }
 

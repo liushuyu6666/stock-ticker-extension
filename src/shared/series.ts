@@ -14,11 +14,14 @@ export const SNAPSHOT_SERIES_POINTS = 70;
 export const MAX_HISTORY_BARS = 260;
 
 /**
- * Budget for the detail dialog's large sparkline. Picked the same way as the
- * other two — by rendering a year of real closes across several budgets at the
- * dialog's width and taking the densest one that still reads as a trend line.
+ * Budget for the detail dialog's large sparkline. Higher than a trading year's
+ * ~252 sessions, so nothing is dropped: at 435 x 108 the full series reads
+ * cleanly — the height carries the density — and drawing every session is what
+ * lets the hover crosshair land on a real trading day rather than on a sampled
+ * approximation of one. The cap only guards against a pathologically long
+ * series.
  */
-export const DETAIL_SERIES_POINTS = 110;
+export const DETAIL_SERIES_POINTS = 400;
 
 /** Evenly samples down to at most `limit` points, always keeping first and last. */
 export function downsampleSeries(values: number[], limit: number): number[] {

@@ -86,6 +86,10 @@ target* and *Remove*. The sparkline retints live as you type a target across the
 current price, so you can see which side of your line the year sits on before
 committing.
 
+**Hovering that sparkline** draws a crosshair — a vertical rule, a dot on the
+line and a label giving that day's date and close. It reads from the series the
+dialog already holds, so tracking the cursor issues no request of any kind.
+
 **Removing** asks for confirmation, then deletes the ticker *and its stored
 history*, reclaiming the space rather than orphaning a series no one reads.
 
@@ -174,7 +178,7 @@ Four triggers, and nothing else reaches the network.
 | **Every hour** | `spark?range=5d…1y` | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
 | **Adding a ticker** | `spark?range=1y` | Immediate backfill, so the sparkline is populated by the time the card appears |
 | **"View all" / Enter** | `v1/finance/lookup` | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row, so the results page needs no request per row |
-| **Opening a ticker's details** | `spark?range=1y` | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist |
+| **Opening a ticker's details** | `spark?range=1y` | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist. The hover crosshair then costs nothing: it reads the series already in hand |
 
 Browser startup and the manual refresh also run a gap check followed by a quote
 poll, on the same two code paths.
@@ -288,7 +292,7 @@ that many points before the path is built.
 |---|---|---|---|
 | Ticker bar card | 46 × 14 | **28** | `MAX_POINTS` (default) |
 | Config page card | 260 × 48 | **70** | `SNAPSHOT_SERIES_POINTS` |
-| Detail dialog | 435 × 108 | **110** | `DETAIL_SERIES_POINTS` |
+| Detail dialog | 435 × 108 | **400 — i.e. every session** | `DETAIL_SERIES_POINTS` |
 
 **The budget is declared, never derived from width.** The first version scaled
 it linearly, which handed the 260px card ~158 points and made it visibly
@@ -306,7 +310,14 @@ trend line rather than a scratchy trace:
 - At **260px** it is subtler. 158 is scratchy and 34 over-smooths, with 70 the
   balance.
 - At **435 × 108** it barely matters — even the full 251 points read cleanly,
-  because the height carries them. 110 was taken as the middle.
+  because the height carries them. So the dialog does not downsample at all: its
+  budget of 400 sits above a trading year's ~252 sessions, and the cap exists
+  only to guard against a pathologically long series.
+
+Drawing every session there is not just cosmetic. It is what lets the **hover
+crosshair** land on a real trading day: a point index *is* a session index, so
+the date under the cursor needs no separate lookup and no interpolation between
+sampled points. At 436px that works out to ~1.7px per session.
 
 `SNAPSHOT_SERIES_POINTS` does double duty: it is also the cap on what the
 published snapshot stores, so the largest thing routinely drawn and the most

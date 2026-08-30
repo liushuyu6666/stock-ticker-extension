@@ -1,7 +1,7 @@
 import { sendMessage } from '../shared/messages';
 import { DETAIL_SERIES_POINTS } from '../shared/series';
 import type { SymbolPreview, Trend } from '../shared/types';
-import { createSparkline } from '../ui/sparkline';
+import { createSparkline, sparklineGeometry } from '../ui/sparkline';
 
 const DETAIL_SPARKLINE = { width: 420, height: 120, fluid: true, points: DETAIL_SERIES_POINTS };
 
@@ -88,11 +88,11 @@ export class TickerDetailDialog {
         actionRow(preview, finish)
       );
 
-      // Retint the sparkline live as the target moves across the price.
+      // Retint the sparkline live as the target moves across the price. The
+      // crosshair is rewired with it, since the svg it tracks is replaced.
       target.addEventListener('input', () => {
-        const holder = card.querySelector('.detail-spark');
-        if (!holder) return;
-        holder.replaceChildren(...sparklineChildren(preview, target.value));
+        const holder = card.querySelector<HTMLElement>('.detail-spark');
+        if (holder) paintSpark(holder, preview, target.value);
       });
 
       target.focus();
@@ -121,14 +121,90 @@ function trendFor(preview: SymbolPreview, rawTarget: string): Trend {
   return preview.price > target ? 'above' : 'atOrBelow';
 }
 
-function sparklineChildren(preview: SymbolPreview, rawTarget: string): Node[] {
+/**
+ * Fills the sparkline holder and wires the hover crosshair.
+ *
+ * Purely local: every close and date is already in the preview the dialog
+ * fetched when it opened, so tracking the cursor costs no request.
+ */
+function paintSpark(holder: HTMLElement, preview: SymbolPreview, rawTarget: string): void {
   if (preview.closes.length === 0) {
     const empty = document.createElement('span');
     empty.className = 'detail-spark-empty';
     empty.textContent = 'No history available for this symbol.';
-    return [empty];
+    holder.replaceChildren(empty);
+    return;
   }
-  return [createSparkline(preview.closes, trendFor(preview, rawTarget), DETAIL_SPARKLINE)];
+
+  const svg = createSparkline(preview.closes, trendFor(preview, rawTarget), DETAIL_SPARKLINE);
+
+  const cursor = document.createElement('div');
+  cursor.className = 'spark-cursor';
+  const dot = document.createElement('div');
+  dot.className = 'spark-dot';
+  const tip = document.createElement('div');
+  tip.className = 'spark-tip';
+  const tipDate = document.createElement('span');
+  tipDate.className = 'spark-tip-date';
+  const tipPrice = document.createElement('span');
+  tipPrice.className = 'spark-tip-price';
+  tip.append(tipDate, tipPrice);
+
+  const hide = (): void => {
+    holder.classList.remove('is-tracking');
+  };
+
+  // The dialog draws every session, so a point index is a trading day index —
+  // no separate lookup is needed to name the day under the cursor.
+  const geometry = sparklineGeometry(preview.closes, DETAIL_SPARKLINE.points, DETAIL_SPARKLINE.height);
+  const lastIndex = geometry.points.length - 1;
+
+  const track = (event: PointerEvent): void => {
+    const box = svg.getBoundingClientRect();
+    if (box.width === 0) return;
+
+    const ratio = clamp((event.clientX - box.left) / box.width, 0, 1);
+    const index = Math.round(ratio * lastIndex);
+
+    const x = geometry.xFraction(index) * box.width;
+    const y = geometry.yFraction(index) * box.height;
+
+    cursor.style.left = `${x}px`;
+    dot.style.left = `${x}px`;
+    dot.style.top = `${y}px`;
+
+    tipDate.textContent = formatDate(preview.dates[index]);
+    tipPrice.textContent = geometry.points[index].toFixed(2);
+
+    // Clamp so the label never hangs off either edge of the chart.
+    const half = tip.getBoundingClientRect().width / 2;
+    tip.style.left = `${clamp(x, half, box.width - half)}px`;
+    tip.style.top = `${y}px`;
+
+    holder.classList.add('is-tracking');
+  };
+
+  holder.replaceChildren(svg, cursor, dot, tip);
+  holder.onpointermove = track;
+  holder.onpointerleave = hide;
+  holder.onpointercancel = hide;
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(Math.max(value, low), high);
+}
+
+function formatDate(iso: string | undefined): string {
+  if (!iso) return '';
+  // Parsed and formatted as UTC, or a local offset would shift the label a day.
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 }
 
 function header(preview: SymbolPreview): HTMLElement {
@@ -189,14 +265,20 @@ function priceBlock(preview: SymbolPreview): HTMLElement {
 function sparklineBlock(preview: SymbolPreview, rawTarget: string): HTMLElement {
   const holder = document.createElement('div');
   holder.className = 'detail-spark';
-  holder.append(...sparklineChildren(preview, rawTarget));
+  paintSpark(holder, preview, rawTarget);
 
   const wrap = document.createElement('div');
   wrap.className = 'detail-spark-wrap';
   const label = document.createElement('span');
   label.className = 'detail-spark-label';
   label.textContent = 'Past year';
-  wrap.append(label, holder);
+  const hint = document.createElement('span');
+  hint.className = 'detail-spark-hint';
+  hint.textContent = 'hover for any day';
+  const head = document.createElement('div');
+  head.className = 'detail-spark-head';
+  head.append(label, hint);
+  wrap.append(head, holder);
   return wrap;
 }
 
