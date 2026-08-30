@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from '../shared/messages';
+import { SNAPSHOT_SERIES_POINTS, downsampleSeries } from '../shared/series';
 import type { DailyBar, Quote, TickerRow, TickerSnapshot, WatchlistEntry } from '../shared/types';
 import type { HistoryStore } from './HistoryStore';
 import type { QuoteProvider } from './QuoteProvider';
@@ -64,11 +65,25 @@ export class TickerService {
   /**
    * Writing the snapshot to storage is also how every mounted surface learns
    * about it — they subscribe to storage.onChanged instead of holding a port.
+   *
+   * The write is skipped when nothing in the rows changed. Markets are shut for
+   * roughly three quarters of the week, and through all of that the poll would
+   * otherwise rewrite a byte-identical payload every minute and wake every open
+   * surface to re-render it.
    */
   private async publish(snapshot: TickerSnapshot): Promise<TickerSnapshot> {
+    const signature = JSON.stringify(snapshot.rows) + String(snapshot.error);
+    if (signature === this.lastSignature) return snapshot;
+    this.lastSignature = signature;
     await chrome.storage.local.set({ [STORAGE_KEYS.snapshot]: snapshot });
     return snapshot;
   }
+
+  /**
+   * In-memory only. A restarted worker publishes once before it settles, which
+   * costs one redundant write and keeps the check free of its own storage key.
+   */
+  private lastSignature = '';
 }
 
 function buildRow(
@@ -87,6 +102,11 @@ function buildRow(
     targetPrice: entry.targetPrice,
     // Above target reads as red, at-or-below as green.
     trend: price !== null && price > entry.targetPrice ? 'above' : 'atOrBelow',
-    closes: bars.map((bar) => bar.close)
+    // Downsampled to what the widest surface can actually draw. The full series
+    // stays in the history store; this is a render payload, not a second copy.
+    closes: downsampleSeries(
+      bars.map((bar) => bar.close),
+      SNAPSHOT_SERIES_POINTS
+    )
   };
 }

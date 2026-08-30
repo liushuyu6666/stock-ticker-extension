@@ -1,3 +1,4 @@
+import { downsampleSeries } from '../shared/series';
 import type { Trend } from '../shared/types';
 
 const SPARKLINE_WIDTH = 46;
@@ -28,7 +29,7 @@ export function sparklinePath(
   height = SPARKLINE_HEIGHT,
   maxPoints = MAX_POINTS
 ): string {
-  const points = downsample(closes, maxPoints);
+  const points = downsampleSeries(closes, maxPoints);
   if (points.length === 0) return '';
   if (points.length === 1) {
     const mid = round(height / 2);
@@ -95,16 +96,6 @@ export function createSparkline(
   path.setAttribute('vector-effect', 'non-scaling-stroke');
   svg.append(path);
   return svg;
-}
-
-/** Evenly samples the series down to at most `limit` points, keeping the last. */
-function downsample(values: number[], limit: number): number[] {
-  const clean = values.filter((value) => Number.isFinite(value));
-  if (clean.length <= limit) return clean;
-  const step = (clean.length - 1) / (limit - 1);
-  const sampled: number[] = [];
-  for (let i = 0; i < limit; i += 1) sampled.push(clean[Math.round(i * step)]);
-  return sampled;
 }
 
 function round(value: number): number {

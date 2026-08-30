@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from '../shared/messages';
+import { MAX_HISTORY_BARS } from '../shared/series';
 import type { DailyBar } from '../shared/types';
 import type { HistoryStore } from './HistoryStore';
 
@@ -7,9 +8,6 @@ import type { HistoryStore } from './HistoryStore';
  * so a realistic watchlist costs well under 100 KB of the 10 MB budget.
  */
 export class LocalHistoryStore implements HistoryStore {
-  /** Roughly one trading year plus slack, so the series never grows unbounded. */
-  private static readonly MAX_BARS = 400;
-
   private async get(symbol: string): Promise<DailyBar[]> {
     const key = STORAGE_KEYS.history(symbol);
     const stored = await chrome.storage.local.get(key);
@@ -43,7 +41,7 @@ export class LocalHistoryStore implements HistoryStore {
     const merged = [...byDate.entries()]
       .map(([date, close]) => ({ date, close }))
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-      .slice(-LocalHistoryStore.MAX_BARS);
+      .slice(-MAX_HISTORY_BARS);
 
     await chrome.storage.local.set({ [STORAGE_KEYS.history(symbol)]: merged });
     await this.trackSymbol(symbol);

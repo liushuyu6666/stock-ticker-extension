@@ -1,13 +1,16 @@
+import { SNAPSHOT_SERIES_POINTS } from '../shared/series';
 import type { TickerRow } from '../shared/types';
 import { createSparkline } from '../ui/sparkline';
 
 /**
- * Sized for the card body; the svg stretches to the card via CSS. 70 points was
- * picked the same way as the bar's 28 — by rendering a year of real closes at
- * 34/50/70/100/158 across 260px and taking the last one that still reads as a
- * trend line rather than a scratchy trace.
+ * Sized for the card body; the svg stretches to the card via CSS. The 70-point
+ * budget was picked the same way as the bar's 28 — by rendering a year of real
+ * closes at 34/50/70/100/158 across 260px and taking the last one that still
+ * reads as a trend line rather than a scratchy trace. It is also the cap the
+ * snapshot stores, so the largest thing drawn and the most that is kept are one
+ * number rather than two that can drift.
  */
-const CARD_SPARKLINE = { width: 260, height: 48, fluid: true, points: 70 };
+const CARD_SPARKLINE = { width: 260, height: 48, fluid: true, points: SNAPSHOT_SERIES_POINTS };
 
 /**
  * One ticker on the config page: identity, live price against target, a

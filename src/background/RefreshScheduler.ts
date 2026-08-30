@@ -53,6 +53,11 @@ export class RefreshScheduler {
     const symbols = await this.watchlist.symbols();
     if (symbols.length === 0) return;
 
+    // Runs first and unconditionally: a series orphaned by a removal that raced
+    // the worker's suspension would otherwise sit there until the next backfill
+    // happened to need one, which could be never.
+    await this.history.prune(symbols);
+
     const target = lastTradingDay();
     const stale: string[] = [];
     for (const symbol of symbols) {
@@ -64,7 +69,6 @@ export class RefreshScheduler {
 
     const fetched = await this.provider.fetchHistory(stale);
     for (const [symbol, bars] of fetched) await this.history.upsert(symbol, bars);
-    await this.history.prune(symbols);
   }
 
   /** Records that a bar is on screen, which re-enables quote polling. */

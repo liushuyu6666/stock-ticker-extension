@@ -174,8 +174,37 @@ since `chrome.alarms.create` on an existing name replaces the schedule.
 
 ### Storage
 
-`chrome.storage.local`. A year of daily closes is ~250 floats, so a realistic
-watchlist costs well under 100 KB of the 10 MB budget.
+`chrome.storage.local`, and four measures keep it honest. Measured on a 7-symbol
+watchlist against real Yahoo data:
+
+| | before | after |
+|---|---|---|
+| `history:*` keys | 103 KB | **67 KB** (−35%) |
+| `cache:snapshot` | 13.0 KB | **4.3 KB** (−67%) |
+| total | 116 KB | **71 KB** |
+
+1. **The snapshot stores a render payload, not a second copy of history.** It
+   used to carry every symbol's full close series — a duplicate of the history
+   store, rewritten on every quote poll. It now carries the series downsampled
+   to 70 points, which is the most any surface can draw. The card's sparkline is
+   bit-identical as a result; the bar's shifts imperceptibly, since it samples
+   28 points from 70 rather than from 251.
+2. **History is capped at one trading year** (`MAX_HISTORY_BARS = 260`), not the
+   arbitrary 400 it used to be. 400 bars is ~1.6 years — storage a one-year
+   sparkline could never show, and which would have quietly stretched the
+   chart's span past a year once it filled.
+3. **An unchanged snapshot is not rewritten.** Markets are shut for roughly
+   three quarters of the week, and through all of it the poll would otherwise
+   store a byte-identical payload every minute and wake every open surface to
+   re-render it.
+4. **Pruning runs on every history sync**, not only when a backfill happened, so
+   a series orphaned by a removal that raced the worker's suspension is
+   reclaimed on the next pass rather than lingering indefinitely.
+
+One thing deliberately *not* done: rounding stored closes. The `spark` endpoint
+already returns short decimals (`232.14`), unlike the `chart` endpoint
+(`232.13999938964844`), so a rounding pass would cost precision and save
+nothing.
 
 A MongoDB-backed `HistoryStore` was considered and deliberately deferred: it
 would need a local HTTP service (MV3 has no TCP sockets), which turns a
