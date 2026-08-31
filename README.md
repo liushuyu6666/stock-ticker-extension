@@ -190,18 +190,33 @@ Yahoo ──request──▶   (nothing stored)  ──────────�
 
 ## 1 · Network calls — what triggers a request, and what it leaves behind
 
-Four triggers, and nothing else reaches the network.
+Six triggers, and nothing else reaches the network. Two run on a clock; the
+other four are the user's own doing.
 
-| Trigger | Request | Stored afterwards? | Notes |
-|---|---|---|---|
-| **Typing in the search box** | `v1/finance/search` | **No** — lives in the dropdown's DOM, gone when it closes | Debounced 220 ms — one call per typing *pause*, not per keystroke. Seven results, capped upstream by `quotesCount` |
-| **Every minute** | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. Fires **only while a surface is on screen**: a mounted bar and an open config page each re-announce themselves every minute, and if nothing has asked for a snapshot in 5 minutes the alarm runs and does nothing |
-| **Every hour** | `spark?range=5d…1y` | **Yes, merged.** Bars upserted by date into `history:<SYMBOL>` (local), capped at 260 | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
-| **Adding a ticker** | `spark?range=1y` | **Yes, merged** — same `history:<SYMBOL>` path, plus the watchlist entry in sync | Immediate backfill, so the sparkline is populated by the time the card appears |
-| **"View all" / Enter** | `v1/finance/lookup` | **No** — held in memory by the results view so the exchange filter can work without refetching, discarded on navigating away | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row, so the results page needs no request per row |
-| **Opening a ticker's details** | `spark?range=1y` | **No** — rendered and discarded, including its full-resolution year | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist. The hover crosshair then costs nothing: it reads the series already in hand |
+| Trigger | Frequency | Request | Stored afterwards? | Notes |
+|---|---|---|---|---|
+| **Quote poll** | **Every 1 min** — `QUOTE_PERIOD_MS`, the floor Chrome clamps alarms to. Runs only while a surface is on screen | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. A mounted bar and an open config page each re-announce themselves every minute; if nothing has asked for a snapshot in 5 minutes the alarm still fires and does nothing |
+| **History gap check** | **Every 60 min** — `HISTORY_PERIOD_MINUTES`. In network terms **about once per trading day**: 23 of every 24 ticks find no gap and touch nothing | `spark?range=5d…1y` | **Yes, merged.** Bars upserted by date into `history:<SYMBOL>` (local), capped at 260 | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
+| **Typing in the search box** | On demand — at most one per typing *pause*, debounced 220 ms | `v1/finance/search` | **No** — lives in the dropdown's DOM, gone when it closes | Seven results, capped upstream by `quotesCount` |
+| **Adding a ticker** | Once per ticker added | `spark?range=1y` | **Yes, merged** — same `history:<SYMBOL>` path, plus the watchlist entry in sync | Immediate backfill, so the sparkline is populated by the time the card appears |
+| **"View all" / Enter** | Once per query, not per row | `v1/finance/lookup` | **No** — held in memory by the results view so the exchange filter can work without refetching, discarded on navigating away | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row |
+| **Opening a ticker's details** | Once per open | `spark?range=1y` | **No** — rendered and discarded, including its full-resolution year | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist. The hover crosshair then costs nothing: it reads the series already in hand |
 
-Two things that column makes plain:
+**The four cadences, and how they relate.** Only the first sends anything; the
+rest govern when it is worth sending, and how what arrives is presented.
+
+| Interval | What it governs | Where |
+|---|---|---|
+| **1 min** | the quote poll — the only recurring request | `QUOTE_PERIOD_MS` |
+| **5 min** | how long after a surface last spoke up the poll keeps running | `RefreshScheduler.CONSUMER_IDLE_MS` |
+| **10 min** | how old a snapshot gets before the UI stops presenting it as live | `STALE_AFTER_MS` |
+| **60 min** | the history gap check — a local read that usually ends there | `HISTORY_PERIOD_MINUTES` |
+
+Each sits well clear of the one above it, and that spacing is the point: the
+staleness threshold is ten polls deep so a single missed minute never trips it,
+and the idle timeout is five polls deep so a tab switch does not stop the clock.
+
+Two things the *Stored afterwards?* column makes plain:
 
 - **Only the two scheduled calls persist anything.** Everything driven by a click
   or a keystroke — search, lookup, preview — is read-only against storage, which
