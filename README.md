@@ -285,16 +285,10 @@ names — `["AAPL", "MSFT", "NVDA"]` — and nothing more: no dates, no closes, 
 part of the series themselves. Its whole job is to answer one question, *which
 symbols currently have a series stored on this device?*
 
-**The second machine is what makes that list load-bearing.** There, a removal
-arrives as nothing more than a shorter watchlist — `history.remove()` is
-reachable only from a local click, so no code on that device is ever told that a
-symbol has lost its owner. It still has the name sitting in its index and the
-series sitting under its key, and `prune` is the only thing that will ever notice
-the mismatch: it walks the indexed **symbols**, finds one the watchlist no longer
-contains, and deletes that symbol's **series**. Without the list it would not know
-the name was there to check. A single-device user would barely notice if orphan
-detection stopped working; a two-device user would accumulate a dead series for
-every ticker they ever removed elsewhere.
+**The second machine is why it exists.** Remove a ticker on one machine and the
+other's series is *not* deleted with it — only the watchlist syncs. That machine
+just sees a shorter watchlist, so `history:index` tells `prune` which symbols it
+still holds, and so which series to delete.
 
 Losing the list is unrecoverable: `prune` then finds nothing stale, and every
 existing orphan is invisible for good. Now that a year of closes encodes to
