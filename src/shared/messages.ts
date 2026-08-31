@@ -17,6 +17,7 @@ export type Request =
   | { type: 'ADD_SYMBOL'; match: SymbolMatch; targetPrice: number }
   | { type: 'REMOVE_SYMBOL'; symbol: string }
   | { type: 'SET_TARGET'; symbol: string; targetPrice: number }
+  | { type: 'IMPORT_WATCHLIST'; entries: WatchlistEntry[] }
   | { type: 'REFRESH_NOW' }
   | { type: 'OPEN_CONFIG' };
 

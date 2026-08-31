@@ -102,6 +102,23 @@ export class MessageRouter {
         return { ok: true, snapshot: await this.ticker.rebuild() };
       }
 
+      case 'IMPORT_WATCHLIST': {
+        // Merged, never replaced: an import is a restore on a fresh install and
+        // a top-up on a populated one, and only the first of those can assume
+        // the file is the whole truth.
+        const existing = await this.watchlist.list();
+        const bySymbol = new Map(existing.map((entry) => [entry.symbol, entry]));
+        for (const incoming of request.entries) {
+          const current = bySymbol.get(incoming.symbol);
+          if (current) current.targetPrice = incoming.targetPrice;
+          else bySymbol.set(incoming.symbol, { ...incoming, order: bySymbol.size });
+        }
+        await this.watchlist.save([...bySymbol.values()]);
+        // Anything newly added has no series yet, so backfill before publishing.
+        await this.scheduler.syncHistory();
+        return { ok: true, snapshot: await this.ticker.refreshQuotes() };
+      }
+
       case 'REFRESH_NOW': {
         await this.scheduler.syncHistory();
         return { ok: true, snapshot: await this.ticker.refreshQuotes() };

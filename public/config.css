@@ -108,6 +108,39 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.backup { margin-top: auto; padding: 0 8px 12px; }
+
+.backup-title { margin: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--ink); }
+
+.backup-note { margin: 0 0 8px; font-size: 11px; line-height: 1.45; color: var(--ink-faint); }
+
+.backup-actions { display: flex; gap: 14px; }
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link-button:hover { color: var(--ink); }
+.link-button:disabled { opacity: 0.5; cursor: default; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .sidebar-foot {
   margin: auto 8px 0;
   font-size: 11px;

@@ -4,6 +4,7 @@ import type { SymbolMatch, TickerRow, TickerSnapshot } from '../shared/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { FreshnessClock } from './FreshnessClock';
 import { SearchResultsView } from './SearchResultsView';
+import { WatchlistBackup } from './WatchlistBackup';
 import { SidebarNav } from './SidebarNav';
 import { SymbolSearchBox } from './SymbolSearchBox';
 import { TickerDetailDialog } from './TickerDetailDialog';
@@ -67,6 +68,14 @@ export class ConfigApp {
       (symbol, targetPrice) => void this.setTarget(symbol, targetPrice),
       (row) => void this.confirmRemove(row),
       (row) => void this.openDetail(row.symbol)
+    );
+
+    new WatchlistBackup(
+      document.getElementById('export') as HTMLButtonElement,
+      document.getElementById('import') as HTMLButtonElement,
+      document.getElementById('import-file') as HTMLInputElement,
+      (snapshot) => this.apply(snapshot),
+      (message, isError) => this.setStatus(message, isError)
     );
 
     this.results = new SearchResultsView(

@@ -37,6 +37,8 @@ The page header carries a **countdown to the next quote poll** and, under it, th
 
 Beside them is **Refresh**, which runs a gap check and a quote poll immediately — the same two code paths a scheduled tick uses — and the countdown and timestamp move with its reply.
 
+The sidebar's **Watchlist backup** exports your symbols and targets to a JSON file, and imports one back. It exists because uninstalling a Chrome extension erases everything it stores — both storage areas, and the synced copy on Google's servers with them. No API survives that, so the only way a watchlist outlives a reinstall is a copy Chrome does not control. An import **merges**: symbols you already have keep their place and take the file's target, and anything new is appended, so restoring onto a populated list never destroys what is there.
+
 The page is a sidebar plus a main panel. The sidebar holds one section today (*Tickers*, with a live count); it is built from a list so the next section is an array entry rather than a rewrite.
 
 Each ticker is a card carrying its symbol, **full company name and exchange** — so a card is identifiable without decoding the ticker from memory — the current price, how far it sits from target in both absolute and percentage terms, a year-long sparkline, and an editable target. The target commits on blur or Enter rather than per keystroke, so typing `1` on the way to `180` does not write storage or repaint the card mid-edit.
@@ -124,6 +126,7 @@ Driven by a click or a keystroke rather than by an alarm. None of it is on a sch
 
 - **Adding a ticker** — the symbol and target go into the watchlist (sync), a gap check runs immediately to backfill a year into the 260-point pool, and a quote poll follows, so the card appears already populated rather than waiting up to an hour for its sparkline.
 - **Editing a target, removing a ticker** — no network at all. `TickerService.rebuild()` re-joins the watchlist and the pool onto the prices already in the payload and republishes. A removal also deletes that symbol's pool entry, since nothing references it any more; the payload itself is not deleted, only republished without that row.
+- **Exporting or importing the watchlist** — export is a local read written to a file; import writes the merged list to `watchlist`, then runs a gap check and a quote poll so anything new has a series and a price by the time it appears.
 - **Opening a ticker's details** — its own `range=1y` fetch, ~251 points drawn at full resolution, touching neither storage. The hover crosshair costs nothing further: it reads the series already in hand.
 - **Search and "view all"** — two different endpoints, nothing stored either way. Results live in the dropdown's DOM or the results view's memory until you navigate away.
 - **Browser startup and manual refresh** — not a separate path. Both run a gap check followed by a quote poll, the same two code paths the scheduled flow uses.
@@ -221,7 +224,7 @@ Throughout this section, **a series** (one symbol's ordered run of daily closes,
 
 | Key | Area | Holds | Lifetime |
 |---|---|---|---|
-| `watchlist` | sync | symbols, targets, names, exchanges | **Permanent.** The only thing you author. Follows your Chrome profile |
+| `watchlist` | sync | symbols, targets, names, exchanges | **Permanent.** The only thing you author. Follows your Chrome profile — but not past an uninstall, which is what *Watchlist backup* on the config page is for |
 | `history:<SYMBOL>` | local | up to 260 dated closes, encoded | **Permanent for as long as the ticker is on the list.** Never expires, never trimmed by age — only removing the ticker deletes it, and removal deletes it immediately |
 | `history:index` | local | a flat list of symbol names — which symbols have a series stored | **Derived, but not self-healing** — see below. Shrinks as tickers are removed |
 | `cache:snapshot` | local | one render payload, 70 closes per row | **Disposable.** Delete it and the next poll rebuilds it from history plus one quote fetch |

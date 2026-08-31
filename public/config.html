@@ -13,6 +13,15 @@
           <span class="brand-name">Stock Ticker</span>
         </div>
         <div id="sidebar"></div>
+        <div class="backup">
+          <p class="backup-title">Watchlist backup</p>
+          <p class="backup-note">Uninstalling the extension erases everything it stores. Keep a copy.</p>
+          <div class="backup-actions">
+            <button id="export" type="button" class="link-button">Export</button>
+            <button id="import" type="button" class="link-button">Import</button>
+          </div>
+          <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" />
+        </div>
         <p class="sidebar-foot">Prices via Yahoo Finance, delayed ~15 min.</p>
       </aside>
 
