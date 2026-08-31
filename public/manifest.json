@@ -28,10 +28,17 @@
   ],
   "options_page": "config.html",
   "action": {
-    "default_title": "Stock Ticker \u2014 configure"
+    "default_title": "Stock Ticker — configure",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   }

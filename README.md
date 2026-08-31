@@ -48,8 +48,7 @@ will overlap it. There is no generic fix; those sites need a per-domain tweak.
 # Configuration
 
 **Click the bar** — anywhere on it — and the config page opens in a new tab.
-The extension icon and the new tab's *Configure tickers* link go to the same
-place.
+The toolbar icon opens the same page.
 
 The page is a sidebar plus a main panel. The sidebar holds one section today
 (*Tickers*, with a live count); it is built from a list so the next section is
