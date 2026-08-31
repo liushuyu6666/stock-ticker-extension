@@ -514,6 +514,36 @@ crosshair** land on a real trading day: a point index *is* a session index, so
 the date under the cursor needs no separate lookup and no interpolation between
 sampled points. At 436px that works out to ~1.7px per session.
 
+### How often each one is redrawn — and why staleness is not its business
+
+Density and redraw rate are independent. A budget answers *how many points get
+drawn*; it says nothing about *how often*, and the three sizes do not check or
+poll on schedules of their own. What differs between them is what feeds them,
+and how often that feed changes:
+
+| Where | Redrawn when | In practice |
+|---|---|---|
+| Ticker bar card | the snapshot's rows change | up to once a minute, but the *line* moves at most once a trading day |
+| Config page card | any snapshot arrives | the grid re-renders wholesale, so up to once a minute |
+| Detail dialog | the dialog opens | once, from its own fetch; the crosshair then redraws on mouse move from the series already in hand |
+
+The important line there is the middle one. **The per-minute poll cannot change
+a sparkline** — it fetches `range=1d` and reads a price out of the meta block,
+never a close series. Only the hourly gap check adds a bar, and it adds one only
+when a trading day has ended. So the bar's chart is redrawn far more often than
+it changes.
+
+**The age check does not apply to the line at all.** A close from yesterday is
+not stale — it is final, and it will read the same a year from now. What goes
+stale is the *price*, and the ten-minute rule is entirely about that. The
+sparkline dims along with everything else on a stale card only because the card
+is one object: the number on it is untrustworthy, so the whole thing recedes
+rather than presenting a live-looking chart beside a frozen price.
+
+That is also why staleness is measured on `updatedAt` — the timestamp of the
+last *quote* fetch — and not on the newest bar's date. Judging freshness by the
+series would call every watchlist stale all weekend, when nothing is wrong.
+
 `SNAPSHOT_SERIES_POINTS` does double duty: it is also the cap on what the
 published snapshot stores, so the largest thing routinely drawn and the most
 that is kept are one constant rather than two that can drift. The detail dialog
