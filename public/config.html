@@ -10,10 +10,7 @@
       <aside class="sidebar">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
-          <span class="brand-text">
-            <span class="brand-name">Stock Ticker</span>
-            <span id="brand-clock" class="brand-clock" aria-live="off"></span>
-          </span>
+          <span class="brand-name">Stock Ticker</span>
         </div>
         <div id="sidebar"></div>
         <p class="sidebar-foot">Prices via Yahoo Finance, delayed ~15 min.</p>
@@ -25,7 +22,13 @@
             <h1 class="main-title">Tickers</h1>
             <p id="main-count" class="main-count"></p>
           </div>
-          <div id="search"></div>
+          <div class="main-tools">
+            <div class="freshness">
+              <div id="freshness" class="freshness-lines" aria-live="off"></div>
+              <button id="refresh" type="button" class="refresh" title="Fetch prices now">Refresh</button>
+            </div>
+            <div id="search"></div>
+          </div>
         </header>
         <div id="status" class="status"></div>
         <div id="main-body" class="main-body"></div>

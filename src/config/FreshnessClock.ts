@@ -1,49 +1,83 @@
-import { formatAge, formatCountdown, isStale, msUntilNextRefresh } from '../shared/freshness';
+import { formatAge, formatCountdown, formatIsoLocal, isStale, msUntilNextRefresh } from '../shared/freshness';
+
+export interface FreshnessState {
+  /** Epoch ms of the last successful quote fetch. */
+  updatedAt: number;
+  /** Epoch ms of the last attempt, successful or not. */
+  attemptedAt: number;
+  /** Set when that last attempt failed. */
+  error: string | null;
+  hasRows: boolean;
+}
 
 /**
- * The little line under the brand. It answers one question — "is what I am
- * looking at current?" — in the only two ways that question has an answer:
- * counting down to the next refresh while things are healthy, and naming the
- * age of the prices once they have stopped arriving.
+ * The freshness block in the page header: a countdown to the next quote poll,
+ * and the timestamp of the last one that actually returned prices.
+ *
+ * Red means the same thing in both lines — what you are looking at did not come
+ * from the last attempt — so a glance at the colour is enough, and the two lines
+ * only say which kind of trouble it is.
  */
 export class FreshnessClock {
   /** A countdown that does not tick every second is just a stale label. */
   private static readonly TICK_MS = 1000;
 
-  private updatedAt = 0;
-  private hasRows = false;
+  private readonly countdown: HTMLElement;
+  private readonly stamp: HTMLElement;
+  private state: FreshnessState = { updatedAt: 0, attemptedAt: 0, error: null, hasRows: false };
 
   constructor(private readonly host: HTMLElement) {
-    setInterval(() => this.paint(), FreshnessClock.TICK_MS);
-  }
+    this.countdown = document.createElement('p');
+    this.countdown.className = 'freshness-countdown';
 
-  /** Called on every snapshot; the clock runs itself between them. */
-  set(updatedAt: number, hasRows: boolean): void {
-    this.updatedAt = updatedAt;
-    this.hasRows = hasRows;
+    this.stamp = document.createElement('p');
+    this.stamp.className = 'freshness-stamp';
+
+    this.host.append(this.countdown, this.stamp);
+    setInterval(() => this.paint(), FreshnessClock.TICK_MS);
     this.paint();
   }
 
+  set(state: FreshnessState): void {
+    this.state = state;
+    this.paint();
+  }
+
+  /** Called while a manual refresh is in flight, so the countdown does not tick on. */
+  markRefreshing(): void {
+    this.countdown.textContent = 'refreshing…';
+    this.countdown.className = 'freshness-countdown';
+  }
+
   private paint(): void {
-    // Nothing on the watchlist means nothing is being polled, so a countdown
-    // would be counting towards a refresh that will never happen.
-    if (!this.hasRows || this.updatedAt <= 0) {
-      this.host.textContent = '';
-      this.host.className = 'brand-clock';
-      this.host.removeAttribute('title');
+    const { updatedAt, attemptedAt, error, hasRows } = this.state;
+    // Nothing on the watchlist means nothing is polled, so a countdown would be
+    // counting towards a refresh that will never happen.
+    if (!hasRows) {
+      this.countdown.textContent = '';
+      this.stamp.textContent = '';
       return;
     }
 
     const now = Date.now();
-    if (isStale(this.updatedAt, now)) {
-      this.host.textContent = `prices ${formatAge(now - this.updatedAt)} old`;
-      this.host.className = 'brand-clock is-stale';
-      this.host.title = 'No successful refresh recently — these are the last known prices.';
+    const stale = isStale(updatedAt, now);
+    const bad = stale || error !== null;
+
+    this.countdown.textContent = `next refresh ${formatCountdown(msUntilNextRefresh(attemptedAt, now))}`;
+    this.countdown.className = bad ? 'freshness-countdown is-bad' : 'freshness-countdown';
+    this.countdown.title = error
+      ? `The last poll failed: ${error}`
+      : 'Counting down to the next automatic price refresh.';
+
+    if (updatedAt <= 0) {
+      this.stamp.textContent = 'last update — never';
+      this.stamp.className = 'freshness-stamp is-bad';
       return;
     }
-
-    this.host.textContent = `next refresh ${formatCountdown(msUntilNextRefresh(this.updatedAt, now))}`;
-    this.host.className = 'brand-clock';
-    this.host.title = `Prices last updated at ${new Date(this.updatedAt).toLocaleTimeString()}`;
+    this.stamp.textContent = `last update ${formatIsoLocal(updatedAt)}`;
+    this.stamp.className = bad ? 'freshness-stamp is-bad' : 'freshness-stamp';
+    this.stamp.title = stale
+      ? `No successful refresh for ${formatAge(now - updatedAt)} — these are the last known prices.`
+      : 'When prices last arrived.';
   }
 }

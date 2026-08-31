@@ -22,7 +22,7 @@ export class TickerService {
     const stored = await chrome.storage.local.get(STORAGE_KEYS.snapshot);
     const snapshot = stored[STORAGE_KEYS.snapshot] as TickerSnapshot | undefined;
     if (snapshot && Array.isArray(snapshot.rows)) return snapshot;
-    return { rows: [], updatedAt: 0, error: null };
+    return { rows: [], updatedAt: 0, attemptedAt: 0, error: null };
   }
 
   /**
@@ -32,7 +32,7 @@ export class TickerService {
   async refreshQuotes(): Promise<TickerSnapshot> {
     const entries = await this.watchlist.list();
     if (entries.length === 0) {
-      return this.publish({ rows: [], updatedAt: Date.now(), error: null });
+      return this.publish({ rows: [], updatedAt: Date.now(), attemptedAt: Date.now(), error: null });
     }
 
     const symbols = entries.map((entry) => entry.symbol);
@@ -46,13 +46,14 @@ export class TickerService {
       const rows = entries.map((entry) =>
         buildRow(entry, quotes.get(entry.symbol) ?? null, bars.get(entry.symbol) ?? [])
       );
-      return this.publish({ rows, updatedAt: Date.now(), error: null });
+      return this.publish({ rows, updatedAt: Date.now(), attemptedAt: Date.now(), error: null });
     } catch (error) {
       // Keep the bar populated with the last good prices rather than blanking it.
       const previous = await this.readSnapshot();
-      return this.publish(
-        await this.join(previous, error instanceof Error ? error.message : String(error))
-      );
+      const joined = await this.join(previous, error instanceof Error ? error.message : String(error));
+      // The attempt happened even though the fetch did not, and the countdown
+      // is about attempts.
+      return this.publish({ ...joined, attemptedAt: Date.now() });
     }
   }
 
@@ -75,31 +76,25 @@ export class TickerService {
     const rows = entries.map((entry) =>
       buildRow(entry, null, bars.get(entry.symbol) ?? [], prices.get(entry.symbol) ?? null)
     );
-    return { rows, updatedAt: previous.updatedAt, error };
+    return { rows, updatedAt: previous.updatedAt, attemptedAt: previous.attemptedAt, error };
   }
 
   /**
    * Writing the snapshot to storage is also how every mounted surface learns
    * about it — they subscribe to storage.onChanged instead of holding a port.
    *
-   * The write is skipped when nothing in the rows changed. Markets are shut for
-   * roughly three quarters of the week, and through all of that the poll would
-   * otherwise rewrite a byte-identical payload every minute and wake every open
-   * surface to re-render it.
+   * Every publish writes, including one whose rows are byte-identical to the
+   * last. Skipping those used to save a write a minute, but the timestamps are
+   * part of the payload now: a quiet market produces identical rows for hours,
+   * and suppressing the write would freeze `updatedAt` and have the UI report
+   * prices as stale while every poll behind it was succeeding. `TickerBar`
+   * still compares its own row signature, so the redundant write costs a
+   * storage round trip rather than a repaint.
    */
   private async publish(snapshot: TickerSnapshot): Promise<TickerSnapshot> {
-    const signature = JSON.stringify(snapshot.rows) + String(snapshot.error);
-    if (signature === this.lastSignature) return snapshot;
-    this.lastSignature = signature;
     await chrome.storage.local.set({ [STORAGE_KEYS.snapshot]: snapshot });
     return snapshot;
   }
-
-  /**
-   * In-memory only. A restarted worker publishes once before it settles, which
-   * costs one redundant write and keeps the check free of its own storage key.
-   */
-  private lastSignature = '';
 }
 
 function buildRow(

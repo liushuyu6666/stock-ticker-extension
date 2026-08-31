@@ -81,8 +81,18 @@ export interface TickerRow {
 
 export interface TickerSnapshot {
   rows: TickerRow[];
-  /** Epoch ms of the quote fetch these rows were built from. */
+  /**
+   * Epoch ms of the last *successful* quote fetch — the age the UI reports and
+   * the one staleness is measured against. A failed poll leaves it untouched.
+   */
   updatedAt: number;
+  /**
+   * Epoch ms of the last quote poll *attempt*, successful or not. The countdown
+   * runs off this one: after a failure `updatedAt` stops advancing, and a
+   * countdown driven by it would sit at zero instead of saying when the next
+   * try is due.
+   */
+  attemptedAt: number;
   /** Set when the last refresh failed; rows are then last-known-good. */
   error: string | null;
 }

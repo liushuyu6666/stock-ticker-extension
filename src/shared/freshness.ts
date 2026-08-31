@@ -60,3 +60,23 @@ export function formatAge(ms: number): string {
   const days = Math.floor(hours / 24);
   return days === 1 ? '1 day' : `${days} days`;
 }
+
+/**
+ * `2026-08-31T04:12:33-04:00` — ISO 8601 in the reader's own timezone.
+ *
+ * `Date.prototype.toISOString` would be shorter but always renders UTC, which
+ * makes "when did this last update?" a subtraction the reader has to do in
+ * their head. The offset is spelled out so the timestamp is unambiguous.
+ */
+export function formatIsoLocal(ms: number): string {
+  const date = new Date(ms);
+  const pad = (value: number, width = 2): string => String(Math.abs(value)).padStart(width, '0');
+  // getTimezoneOffset is minutes *behind* UTC, so its sign is inverted here.
+  const offset = -date.getTimezoneOffset();
+  const sign = offset < 0 ? '-' : '+';
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`
+  );
+}

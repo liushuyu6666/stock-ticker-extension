@@ -33,6 +33,10 @@ It cannot appear on `chrome://` pages, the Web Store, or the PDF viewer — exte
 
 **Click the bar** — anywhere on it — and the config page opens in a new tab. The toolbar icon opens the same page.
 
+The page header carries a **countdown to the next quote poll** and, under it, the ISO timestamp of the last poll that actually returned prices — `last update 2026-08-31T17:52:06-04:00`. Both turn red together, and they mean one thing: what you are reading did not come from the last attempt. The countdown reddens as soon as an attempt fails; the timestamp is also red once nothing has succeeded for thirty minutes.
+
+Beside them is **Refresh**, which runs a gap check and a quote poll immediately — the same two code paths a scheduled tick uses — and the countdown and timestamp move with its reply.
+
 The page is a sidebar plus a main panel. The sidebar holds one section today (*Tickers*, with a live count); it is built from a list so the next section is an array entry rather than a rewrite.
 
 Each ticker is a card carrying its symbol, **full company name and exchange** — so a card is identifiable without decoding the ticker from memory — the current price, how far it sits from target in both absolute and percentage terms, a year-long sparkline, and an editable target. The target commits on blur or Enter rather than per keystroke, so typing `1` on the way to `180` does not write storage or repaint the card mid-edit.
@@ -97,6 +101,8 @@ Snapshot is the core of the data flow. One row of the 70-point payload looks lik
   closes: [70 points] }     ← downsampled from the 260-point pool
 ```
 
+The payload also carries three fields of its own: `updatedAt`, the moment of the last **successful** quote fetch; `attemptedAt`, the moment of the last **attempt**, successful or not; and `error`, set when that attempt failed. The countdown runs off `attemptedAt` and staleness off `updatedAt`, because after a failure the second one stops advancing while the polling carries on.
+
 `TickerBar` fingerprints it one row at a time — `${row.symbol}:${row.price ?? ''}:${row.targetPrice}:${row.closes.length}`, joined by `|`.
 
 The payload has two scheduled sources — the quote poll and the history gap check — plus the on-demand paths further down.
@@ -107,7 +113,7 @@ The payload has two scheduled sources — the quote poll and the history gap che
   - The **history gap check** runs hourly, and does not reach the network until a symbol's newest stored bar is older than the last trading day. When one is, it fetches the smallest range covering the gap and upserts the bars by date into the 260-point pool. Since a trading day produces one bar, that works out to roughly one fetch a day: the remaining 23 hourly checks find every symbol already up to date and stop at a local read.
   - The **quote poll** runs every 10 min. It fetches the price alone, then re-reads the 260-point pool on every run, downsamples 260 → 70 and joins it with the fresh price. Being the faster of the two, it is what carries a new bar into the payload — the gap check never writes one there.
     - It runs only while a **surface (the bar injected into a page, and the config page in its own tab)** is on screen, each one pinging the worker every 60s to say so. With none open the alarm still fires and does nothing, so prices simply stop moving until a surface appears. The gap check has no such gate — it keeps the pool current whether or not anything is watching.
-- **Snapshot** — the join is published to `cache:snapshot`, and the write is skipped when nothing in the rows changed. That write is also how every surface hears about it: each one listens on `chrome.storage.onChanged`.
+- **Snapshot** — the join is published to `cache:snapshot` on every poll, including one whose rows are byte-identical to the last, since the timestamps above are part of the payload and a quiet market would otherwise freeze them. That write is also how every surface hears about it: each one listens on `chrome.storage.onChanged`.
 - **How the two sparklines use it** — both draw from the same 70 closes in the payload, and neither ever reads the 260-point pool.
   - The **config page card** redraws whenever a new payload is published — so on a page left open, roughly every 10 minutes, not only when the tab is first opened. The whole grid is rebuilt and all 70 points are drawn.
   - The **ticker bar card** redraws only when the signature changed, downsampling 70 → 28 at draw time. The guard is there because a rebuild restarts the marquee mid-scroll.
@@ -153,7 +159,7 @@ Six triggers, and nothing else reaches the network. Two run on a clock; the othe
 
 | Trigger | Frequency | Request | Stored afterwards? | Notes |
 |---|---|---|---|---|
-| **Quote poll** | **Every 10 min** — `QUOTE_PERIOD_MS`. Chrome's alarm floor is 1 min; this sits well above it, because Yahoo's quotes are ~15 min delayed and polling far inside that window buys freshness the upstream does not have. Runs only while a surface is on screen | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. A mounted bar and an open config page each re-announce themselves every minute — ten times finer than the poll, so the 5-minute consumer window is never missed by a drifting clock. If nothing has asked for a snapshot in 5 minutes the alarm still fires and does nothing |
+| **Quote poll** | **Every 10 min** — `QUOTE_PERIOD_MS`. Chrome's alarm floor is 1 min; this sits well above it, because Yahoo's quotes are ~15 min delayed and polling far inside that window buys freshness the upstream does not have. Runs only while a surface is on screen | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten on every poll so its timestamps stay honest. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. A mounted bar and an open config page each re-announce themselves every minute — ten times finer than the poll, so the 5-minute consumer window is never missed by a drifting clock. If nothing has asked for a snapshot in 5 minutes the alarm still fires and does nothing |
 | **History gap check** | **Every 60 min** — `HISTORY_PERIOD_MINUTES`. In network terms **about once per trading day**: 23 of every 24 ticks find no gap and touch nothing | `spark?range=5d…1y` | **Yes, merged.** Bars upserted by date into `history:<SYMBOL>` (local), capped at 260 | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
 | **Typing in the search box** | On demand — at most one per typing *pause*, debounced 220 ms | `v1/finance/search` | **No** — lives in the dropdown's DOM, gone when it closes | Seven results, capped upstream by `quotesCount` |
 | **Adding a ticker** | Once per ticker added | `spark?range=1y` | **Yes, merged** — same `history:<SYMBOL>` path, plus the watchlist entry in sync | Immediate backfill, so the sparkline is populated by the time the card appears |
@@ -256,7 +262,7 @@ Three situations reach `prune`, and it handles all of them the same way:
 
 ### Size
 
-Five measures keep it small. Measured on a 7-symbol watchlist against real Yahoo data:
+Four measures keep it small. Measured on a 7-symbol watchlist against real Yahoo data:
 
 | | originally | now |
 |---|---|---|
@@ -268,9 +274,8 @@ The quota is **per extension**, not shared with other extensions or with any web
 
 1. **The snapshot stores a render payload, not a second copy of history.** It used to carry every symbol's full close series — a duplicate of the history store, rewritten on every quote poll. It now carries the series downsampled to 70 points, which is the most any surface can draw. The card's sparkline is bit-identical as a result; the bar's shifts imperceptibly, since it samples 28 points from 70 rather than from 251.
 2. **History is capped at one trading year** (`MAX_HISTORY_BARS = 260`), not the arbitrary 400 it used to be. 400 bars is ~1.6 years — storage a one-year sparkline could never show, and which would have quietly stretched the chart's span past a year once it filled.
-3. **An unchanged snapshot is not rewritten.** Markets are shut for roughly three quarters of the week, and through all of it the poll would otherwise store a byte-identical payload on every run and wake every open surface to re-render it.
-4. **Pruning runs on every history sync**, not only when a backfill happened, so a series orphaned by a removal that raced the worker's suspension is reclaimed on the next pass rather than lingering indefinitely.
-5. **Series are stored as a start date plus whole-day offsets**, not as one `{date, close}` object per bar. Repeating a key name and a full ISO string on every one of ~250 bars cost about three quarters of the payload: a year of closes drops from 9.3 KB to 2.7 KB. Offsets are *not* assumed contiguous — weekends and holidays simply produce a jump — and the decoded shape callers see is unchanged, so the encoding stays private to `LocalHistoryStore`. `lastBarDate` reads the last offset straight off the encoded form rather than rebuilding a few hundred objects to look at one, which matters because the hourly gap check asks it for every symbol. A `v` marker tags the format, and the legacy array still decodes, so an existing install migrates silently on each symbol's next upsert.
+3. **Pruning runs on every history sync**, not only when a backfill happened, so a series orphaned by a removal that raced the worker's suspension is reclaimed on the next pass rather than lingering indefinitely.
+4. **Series are stored as a start date plus whole-day offsets**, not as one `{date, close}` object per bar. Repeating a key name and a full ISO string on every one of ~250 bars cost about three quarters of the payload: a year of closes drops from 9.3 KB to 2.7 KB. Offsets are *not* assumed contiguous — weekends and holidays simply produce a jump — and the decoded shape callers see is unchanged, so the encoding stays private to `LocalHistoryStore`. `lastBarDate` reads the last offset straight off the encoded form rather than rebuilding a few hundred objects to look at one, which matters because the hourly gap check asks it for every symbol. A `v` marker tags the format, and the legacy array still decodes, so an existing install migrates silently on each symbol's next upsert.
 
 One thing deliberately *not* done: rounding stored closes. The `spark` endpoint already returns short decimals (`232.14`), unlike the `chart` endpoint (`232.13999938964844`), so a rounding pass would cost precision and save nothing.
 

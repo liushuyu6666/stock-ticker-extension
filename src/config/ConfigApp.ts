@@ -32,6 +32,7 @@ export class ConfigApp {
   private readonly status: HTMLElement;
   private readonly body: HTMLElement;
   private readonly clock: FreshnessClock;
+  private readonly refreshButton: HTMLButtonElement;
 
   private rows: TickerRow[] = [];
   /** Null while the grid is showing; the query string while results are. */
@@ -45,7 +46,9 @@ export class ConfigApp {
     this.body = document.getElementById('main-body') as HTMLElement;
     this.confirm = new ConfirmDialog(document.body);
     this.detail = new TickerDetailDialog(document.body);
-    this.clock = new FreshnessClock(document.getElementById('brand-clock') as HTMLElement);
+    this.clock = new FreshnessClock(document.getElementById('freshness') as HTMLElement);
+    this.refreshButton = document.getElementById('refresh') as HTMLButtonElement;
+    this.refreshButton.addEventListener('click', () => void this.refreshNow());
 
     this.sidebar = new SidebarNav(
       document.getElementById('sidebar') as HTMLElement,
@@ -91,6 +94,29 @@ export class ConfigApp {
     setInterval(() => void this.pull(), SURFACE_HEARTBEAT_MS);
   }
 
+  /**
+   * The manual equivalent of one scheduled tick: a gap check followed by a quote
+   * poll, on the same code paths. The reply is a snapshot like any other, so the
+   * countdown and the timestamp move with it.
+   */
+  private async refreshNow(): Promise<void> {
+    this.refreshButton.disabled = true;
+    this.clock.markRefreshing();
+    try {
+      const response = await sendMessage({ type: 'REFRESH_NOW' });
+      if ('snapshot' in response && response.ok) {
+        this.apply(response.snapshot);
+        if (response.snapshot.error === null) this.setStatus('Prices refreshed.', false);
+      } else if (!response.ok) {
+        this.setStatus(response.error, true);
+      }
+    } catch (error) {
+      this.setStatus(error instanceof Error ? error.message : String(error), true);
+    } finally {
+      this.refreshButton.disabled = false;
+    }
+  }
+
   /** Fetches the current snapshot and, in doing so, keeps the poll alive. */
   private async pull(): Promise<void> {
     try {
@@ -120,7 +146,12 @@ export class ConfigApp {
   private apply(snapshot: TickerSnapshot): void {
     this.rows = snapshot.rows;
     this.refreshFailed = snapshot.error !== null;
-    this.clock.set(snapshot.updatedAt, this.rows.length > 0);
+    this.clock.set({
+      updatedAt: snapshot.updatedAt,
+      attemptedAt: snapshot.attemptedAt,
+      error: snapshot.error,
+      hasRows: this.rows.length > 0
+    });
     this.sidebar.setBadge('tickers', String(this.rows.length));
     const counter = document.getElementById('main-count');
     if (counter) {
