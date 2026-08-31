@@ -1,3 +1,4 @@
+import { isStale } from '../shared/freshness';
 import type { TickerRow } from '../shared/types';
 import { StockCard } from './StockCard';
 
@@ -8,11 +9,18 @@ import { StockCard } from './StockCard';
 export class TickerBar {
   /** Pixels per second the marquee travels. Slow enough to actually read. */
   private static readonly SPEED_PX_PER_SECOND = 40;
+  /**
+   * Staleness arrives with the passage of time, not with a new snapshot — and
+   * when a refresh fails repeatedly the worker stops writing at all, so nothing
+   * would wake the bar. Hence a clock of its own.
+   */
+  private static readonly FRESHNESS_TICK_MS = 15_000;
 
   private readonly bar: HTMLElement;
   private readonly viewport: HTMLElement;
   private readonly track: HTMLElement;
   private signature = '';
+  private updatedAt = 0;
 
   constructor() {
     this.bar = document.createElement('div');
@@ -34,13 +42,20 @@ export class TickerBar {
     if (typeof ResizeObserver !== 'undefined') {
       new ResizeObserver(() => this.scheduleMarquee()).observe(this.viewport);
     }
+
+    setInterval(() => this.applyFreshness(), TickerBar.FRESHNESS_TICK_MS);
   }
 
   get element(): HTMLElement {
     return this.bar;
   }
 
-  update(rows: TickerRow[]): void {
+  update(rows: TickerRow[], updatedAt: number): void {
+    // Applied before the early return below: when a refresh fails the rows are
+    // republished unchanged, and it is precisely then that the dimming matters.
+    this.updatedAt = updatedAt;
+    this.applyFreshness();
+
     // Re-rendering identical rows would restart the animation mid-scroll.
     const next = signatureOf(rows);
     if (next === this.signature) return;
@@ -54,6 +69,15 @@ export class TickerBar {
     // measurements that are not available until this one has been laid out.
     this.track.append(buildGroup(rows));
     this.scheduleMarquee();
+  }
+
+  /**
+   * Dims the whole strip once the prices behind it stop being live, so a frozen
+   * number is distinguishable from a quiet market. A closed exchange and a
+   * throttled endpoint look identical otherwise.
+   */
+  private applyFreshness(): void {
+    this.bar.classList.toggle('is-stale', isStale(this.updatedAt));
   }
 
   /** Measurement has to wait for layout, or every width reads as zero. */

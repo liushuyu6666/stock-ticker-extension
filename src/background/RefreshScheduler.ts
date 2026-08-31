@@ -1,3 +1,4 @@
+import { QUOTE_PERIOD_MS } from '../shared/freshness';
 import { STORAGE_KEYS } from '../shared/messages';
 import type { HistoryStore } from './HistoryStore';
 import type { HistoryRange, QuoteProvider } from './QuoteProvider';
@@ -12,8 +13,12 @@ const HISTORY_ALARM = 'ticker:history';
  * live price is stale in a minute, a closed day's close is never stale at all.
  */
 export class RefreshScheduler {
-  /** Chrome clamps alarm periods to one minute. */
-  private static readonly QUOTE_PERIOD_MINUTES = 1;
+  /**
+   * Chrome clamps alarm periods to one minute. Expressed in terms of the shared
+   * constant so the countdown the config page shows cannot drift from the
+   * cadence that actually runs.
+   */
+  private static readonly QUOTE_PERIOD_MINUTES = QUOTE_PERIOD_MS / 60_000;
   /**
    * An hourly *gap check* — "is my newest bar older than the last trading day?"
    * A wall-clock schedule would assume the browser happens to be running at that

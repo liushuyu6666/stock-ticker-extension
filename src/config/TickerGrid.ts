@@ -10,7 +10,7 @@ export class TickerGrid {
     private readonly onOpen: (row: TickerRow) => void
   ) {}
 
-  render(rows: TickerRow[]): void {
+  render(rows: TickerRow[], refreshFailed = false): void {
     if (rows.length === 0) {
       this.host.replaceChildren(this.renderEmpty());
       return;
@@ -19,7 +19,9 @@ export class TickerGrid {
     const grid = document.createElement('div');
     grid.className = 'grid';
     for (const row of rows) {
-      grid.append(new TickerCard(row, this.onTargetChange, this.onRemove, this.onOpen).render());
+      grid.append(
+        new TickerCard(row, this.onTargetChange, this.onRemove, this.onOpen, refreshFailed).render()
+      );
     }
     this.host.replaceChildren(grid);
   }

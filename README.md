@@ -195,7 +195,7 @@ Four triggers, and nothing else reaches the network.
 | Trigger | Request | Stored afterwards? | Notes |
 |---|---|---|---|
 | **Typing in the search box** | `v1/finance/search` | **No** — lives in the dropdown's DOM, gone when it closes | Debounced 220 ms — one call per typing *pause*, not per keystroke. Seven results, capped upstream by `quotesCount` |
-| **Every minute** | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. Fires **only while a bar is on screen**: if nothing has asked for a snapshot in 5 minutes, the alarm runs and does nothing |
+| **Every minute** | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. Fires **only while a surface is on screen**: a mounted bar and an open config page each re-announce themselves every minute, and if nothing has asked for a snapshot in 5 minutes the alarm runs and does nothing |
 | **Every hour** | `spark?range=5d…1y` | **Yes, merged.** Bars upserted by date into `history:<SYMBOL>` (local), capped at 260 | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day — so in practice **about one fetch per trading day**, and 23 of every 24 ticks touch no network at all. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
 | **Adding a ticker** | `spark?range=1y` | **Yes, merged** — same `history:<SYMBOL>` path, plus the watchlist entry in sync | Immediate backfill, so the sparkline is populated by the time the card appears |
 | **"View all" / Enter** | `v1/finance/lookup` | **No** — held in memory by the results view so the exchange filter can work without refetching, discarded on navigating away | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row, so the results page needs no request per row |
@@ -242,6 +242,47 @@ goes through `TickerService.rebuild()`, which re-joins the watchlist and stored
 history onto the prices already in the snapshot without touching the network. A
 target is the user's own number: it changes which side of the line a row falls
 on, not what the market says.
+
+### When a price stops arriving
+
+A poll can fail: Yahoo throttles the caller (`HTTP 429`), the laptop sleeps, the
+worker never wakes. In all of those the snapshot keeps its last good rows and
+the bar goes on rendering them, which is the right default — a blank strip helps
+nobody. What it leaves behind is a frozen number that looks exactly like a live
+one. On a symbol that trades around the clock, that is a lie by omission.
+
+Three signals, coarse to specific:
+
+| Where | Signal | Trigger |
+|---|---|---|
+| The bar | every card fades to 55% opacity | the snapshot is **10 minutes** old |
+| The config sidebar | `next refresh 0:47`, counting down; once stale, a red `prices 12 min old` | the same 10-minute threshold |
+| A config card | a red `!` in its top-right corner | the **last** refresh threw |
+
+The two triggers are deliberately different things. `snapshot.error` is precise
+but narrow — set only when an attempt actually failed, silent when no attempt
+was made at all. The age of `updatedAt` catches both, because it measures what
+the reader actually cares about: how old this number is, not whether the last
+try raised.
+
+**Ten minutes**, an order of magnitude above the one-minute poll. A single
+missed minute is noise — a late alarm, a suspended worker, one unlucky request —
+and dimming the bar for it would train the eye to ignore the dimming. Ten
+minutes means roughly ten consecutive failures, which is a condition rather than
+a hiccup.
+
+**Both surfaces run their own clock**, because staleness arrives with the
+passage of time rather than with a new snapshot — and when refreshes keep
+failing the worker stops writing altogether, since `publish` skips a
+byte-identical payload. Nothing would wake a listener. So `TickerBar` re-checks
+every 15 seconds and the sidebar clock ticks every second, both reading the same
+`updatedAt` they were last handed.
+
+The countdown is also what makes the consumer rule visible. The poll only runs
+while some surface has asked for a snapshot in the last five minutes, so the
+config page re-asks every minute exactly as the bar does. Without that, a config
+page left open on its own would show a countdown to a refresh that had quietly
+stopped happening.
 
 ### Planned: configurable refresh
 

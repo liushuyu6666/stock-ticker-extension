@@ -43,7 +43,7 @@ function mount(): void {
   pushPageDown();
 
   const client = new TickerClient();
-  client.subscribe((snapshot) => bar.update(snapshot.rows));
+  client.subscribe((snapshot) => bar.update(snapshot.rows, snapshot.updatedAt));
 
   // Clicking anywhere on the bar is the way into the config page.
   bar.element.addEventListener('click', () => void client.openConfig());

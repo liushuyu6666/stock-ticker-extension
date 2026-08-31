@@ -21,7 +21,9 @@ export class TickerCard {
     private readonly row: TickerRow,
     private readonly onTargetChange: (symbol: string, targetPrice: number) => void,
     private readonly onRemove: (row: TickerRow) => void,
-    private readonly onOpen: (row: TickerRow) => void
+    private readonly onOpen: (row: TickerRow) => void,
+    /** True when the most recent poll failed and this price is last-known-good. */
+    private readonly refreshFailed = false
   ) {}
 
   render(): HTMLElement {
@@ -83,7 +85,26 @@ export class TickerCard {
     remove.addEventListener('click', () => this.onRemove(row));
 
     header.append(identity, remove);
+
+    // Appended last so it sits in the corner itself: the remove button keeps its
+    // place in the row but is transparent until the card is hovered.
+    if (this.refreshFailed) header.append(this.renderAlert());
     return header;
+  }
+
+  /**
+   * Says "this number did not come from the last attempt". Deliberately a
+   * marker rather than a message — the card has no room for a sentence, and the
+   * status line above already carries the wording.
+   */
+  private renderAlert(): HTMLElement {
+    const alert = document.createElement('span');
+    alert.className = 'card-alert';
+    alert.textContent = '!';
+    alert.title = `Last refresh failed — showing the last known price for ${this.row.symbol}`;
+    alert.setAttribute('role', 'img');
+    alert.setAttribute('aria-label', 'Last refresh failed');
+    return alert;
   }
 
   private renderPrice(): HTMLElement {

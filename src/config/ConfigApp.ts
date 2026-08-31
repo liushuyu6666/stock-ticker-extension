@@ -1,6 +1,8 @@
+import { QUOTE_PERIOD_MS } from '../shared/freshness';
 import { STORAGE_KEYS, sendMessage } from '../shared/messages';
 import type { SymbolMatch, TickerRow, TickerSnapshot } from '../shared/types';
 import { ConfirmDialog } from './ConfirmDialog';
+import { FreshnessClock } from './FreshnessClock';
 import { SearchResultsView } from './SearchResultsView';
 import { SidebarNav } from './SidebarNav';
 import { SymbolSearchBox } from './SymbolSearchBox';
@@ -29,17 +31,21 @@ export class ConfigApp {
   private readonly detail: TickerDetailDialog;
   private readonly status: HTMLElement;
   private readonly body: HTMLElement;
+  private readonly clock: FreshnessClock;
 
   private rows: TickerRow[] = [];
   /** Null while the grid is showing; the query string while results are. */
   private resultsQuery: string | null = null;
   private statusTimer: number | undefined;
+  /** Whether the snapshot on screen came from a refresh that failed. */
+  private refreshFailed = false;
 
   constructor() {
     this.status = document.getElementById('status') as HTMLElement;
     this.body = document.getElementById('main-body') as HTMLElement;
     this.confirm = new ConfirmDialog(document.body);
     this.detail = new TickerDetailDialog(document.body);
+    this.clock = new FreshnessClock(document.getElementById('brand-clock') as HTMLElement);
 
     this.sidebar = new SidebarNav(
       document.getElementById('sidebar') as HTMLElement,
@@ -77,15 +83,29 @@ export class ConfigApp {
       if (change?.newValue) this.apply(change.newValue as TickerSnapshot);
     });
 
-    const response = await sendMessage({ type: 'GET_SNAPSHOT' });
-    if ('snapshot' in response && response.ok) this.apply(response.snapshot);
+    await this.pull();
+
+    // The worker only polls while some surface is asking for rows, and asking
+    // is what marks this page as one. Without this the countdown would tick
+    // down to a refresh that had already stopped running.
+    setInterval(() => void this.pull(), QUOTE_PERIOD_MS);
+  }
+
+  /** Fetches the current snapshot and, in doing so, keeps the poll alive. */
+  private async pull(): Promise<void> {
+    try {
+      const response = await sendMessage({ type: 'GET_SNAPSHOT' });
+      if ('snapshot' in response && response.ok) this.apply(response.snapshot);
+    } catch {
+      // The worker was asleep or restarting; the next tick retries.
+    }
   }
 
   // ---- views ----
 
   private showTickers(): void {
     this.resultsQuery = null;
-    this.grid.render(this.rows);
+    this.grid.render(this.rows, this.refreshFailed);
   }
 
   private async showResults(query: string): Promise<void> {
@@ -99,12 +119,14 @@ export class ConfigApp {
    */
   private apply(snapshot: TickerSnapshot): void {
     this.rows = snapshot.rows;
+    this.refreshFailed = snapshot.error !== null;
+    this.clock.set(snapshot.updatedAt, this.rows.length > 0);
     this.sidebar.setBadge('tickers', String(this.rows.length));
     const counter = document.getElementById('main-count');
     if (counter) {
       counter.textContent = this.rows.length === 1 ? '1 ticker' : `${this.rows.length} tickers`;
     }
-    if (this.resultsQuery === null) this.grid.render(this.rows);
+    if (this.resultsQuery === null) this.grid.render(this.rows, this.refreshFailed);
     if (snapshot.error) this.setStatus('Last refresh failed — showing cached prices.', true);
   }
 

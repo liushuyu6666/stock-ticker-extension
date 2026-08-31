@@ -28,6 +28,14 @@ export const TICKER_CSS = `
   background: #f1eee9;
 }
 
+/* Once the prices stop being live the strip fades, so a frozen number cannot be
+   mistaken for a quiet market. The transition is slow enough that it reads as a
+   state change rather than a flicker. */
+.bar.is-stale .card {
+  opacity: 0.55;
+  transition: opacity 400ms ease;
+}
+
 .viewport {
   flex: 1 1 auto;
   overflow: hidden;

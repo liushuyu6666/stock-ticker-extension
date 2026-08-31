@@ -63,7 +63,19 @@ body {
   background-color: var(--ink);
 }
 
+.brand-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
 .brand-name { font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em; }
+
+/* Tabular figures so a ticking countdown does not jitter the text beside it. */
+.brand-clock {
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.brand-clock.is-stale { color: var(--red); }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
 
@@ -308,6 +320,23 @@ body {
 .card:hover .card-remove,
 .card-remove:focus-visible { opacity: 1; }
 .card-remove:hover { background: rgba(217, 48, 37, 0.1); color: var(--red); }
+
+/* Sits in the corner the remove button vacates: that button is transparent
+   until the card is hovered, so at rest this marker is the only thing there. */
+.card-alert {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(217, 48, 37, 0.12);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
 
 .card-price { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
 
