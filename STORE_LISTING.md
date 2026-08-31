@@ -66,8 +66,10 @@ search terms are sent to Yahoo Finance solely to retrieve prices.
       with no alpha channel, which is what the Store accepts. Upload them in
       filename order: the strip in place on a real page, the watchlist, the
       search dropdown, the all-matches page, the ticker detail dialog. They are
-      the raw captures scaled to fit and centred on the extension's own
-      porcelain ground — nothing is cropped away except the browser scrollbar.
+      the raw captures scaled to the full 1280 width and extended to the full
+      height by continuing the page's own background, so each one fills the
+      frame with no letterbox band. Nothing is cropped away except the browser
+      scrollbar.
 - [ ] Optional small promo tile, 440×280.
 
 ## Release checklist
