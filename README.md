@@ -276,26 +276,38 @@ being kept, merged or reclaimed.
 |---|---|---|---|
 | `watchlist` | sync | symbols, targets, names, exchanges | **Permanent.** The only thing you author. Follows your Chrome profile |
 | `history:<SYMBOL>` | local | up to 260 dated closes, encoded | **Permanent for as long as the ticker is on the list.** Never expires, never trimmed by age — only removing the ticker deletes it, and removal deletes it immediately |
-| `history:index` | local | which symbols have a series | **Derived, but not self-healing** — see below. Shrinks as tickers are removed |
+| `history:index` | local | a flat list of symbol names — which symbols have a series stored | **Derived, but not self-healing** — see below. Shrinks as tickers are removed |
 | `cache:snapshot` | local | one render payload, 70 closes per row | **Disposable.** Delete it and the next poll rebuilds it from history plus one quote fetch |
 | `meta:lastConsumerSeenAt` | local | when a bar was last on screen | **Disposable.** Worst case, one skipped poll |
 
-**`history:index` does not fit either category, and that is a wart.** It exists
-because history is one key per symbol and the storage API in the Chrome version
-this targets cannot list keys by prefix: `get(null)` returns every key *with its
-whole value*, and `getKeys()` only arrived in Chrome 130. So `prune` cannot ask
-storage what it holds, and the index answers that question instead.
+**`history:index` stores symbols, not series.** It is a flat list of ticker
+names — `["AAPL", "MSFT", "NVDA"]` — and nothing more: no dates, no closes, no
+part of the series themselves. Its whole job is to answer one question, *which
+symbols currently have a series stored on this device?*
 
-**The second machine is what makes it load-bearing.** On the device where you
-press Remove, the index is nearly dead weight: `REMOVE_SYMBOL` deletes the
-watchlist entry and the series together, so there is rarely anything left to
-find. It earns its keep on the *other* machine. There, the removal arrives as
-nothing more than a shorter watchlist — `history.remove()` is reachable only
-from a local click, so no code on that device is ever told which series just
-lost its owner. `prune` is the only thing that will ever reclaim it, and the
-index is the only way `prune` knows the series is sitting there. A single-device
-user would barely notice if orphan detection stopped working; a two-device user
-would accumulate a dead series for every ticker they ever removed on the other
+It has to exist because each series lives under its own key — `history:AAPL`,
+`history:MSFT`, and so on — and the storage API in the Chrome version this
+targets cannot list keys by prefix: `get(null)` returns every key *with its whole
+value*, and `getKeys()` only arrived in Chrome 130. So `prune` has no way to ask
+storage what it is holding. It reads this list of symbols instead, and checks
+each name against the watchlist. The list fits neither category in the table
+above, and that is a wart.
+
+**The second machine is what makes that list load-bearing.** On the device where
+you press Remove it is nearly dead weight: `REMOVE_SYMBOL` deletes the watchlist
+entry and the series together and drops the name from the index in the same
+breath, so there is rarely anything left to find.
+
+It earns its keep on the *other* machine. There the removal arrives as nothing
+more than a shorter watchlist — `history.remove()` is reachable only from a
+local click, so no code on that device is ever told that a symbol has lost its
+owner. That machine still has the name sitting in its index and the series
+sitting under its key, and `prune` is the only thing that will ever notice the
+mismatch: it walks the indexed **symbols**, finds one the watchlist no longer
+contains, and deletes that symbol's **series**. Without the list it would not
+know the name was there to check in the first place. A single-device user would
+barely notice if orphan detection stopped working; a two-device user would
+accumulate a dead series for every ticker they ever removed on the other
 machine.
 
 The trouble is what happens if it is lost. `cache:snapshot` is disposable
