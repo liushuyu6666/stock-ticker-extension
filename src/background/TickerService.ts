@@ -21,7 +21,14 @@ export class TickerService {
   async readSnapshot(): Promise<TickerSnapshot> {
     const stored = await chrome.storage.local.get(STORAGE_KEYS.snapshot);
     const snapshot = stored[STORAGE_KEYS.snapshot] as TickerSnapshot | undefined;
-    if (snapshot && Array.isArray(snapshot.rows)) return snapshot;
+    // A snapshot stored by a version without `attemptedAt` is migrated on read:
+    // the last success is the best available guess at the last attempt.
+    if (snapshot && Array.isArray(snapshot.rows)) {
+      if (!Number.isFinite(snapshot.attemptedAt)) {
+        return { ...snapshot, attemptedAt: snapshot.updatedAt ?? 0 };
+      }
+      return snapshot;
+    }
     return { rows: [], updatedAt: 0, attemptedAt: 0, error: null };
   }
 

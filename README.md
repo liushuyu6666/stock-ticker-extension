@@ -33,11 +33,11 @@ It cannot appear on `chrome://` pages, the Web Store, or the PDF viewer — exte
 
 **Click the bar** — anywhere on it — and the config page opens in a new tab. The toolbar icon opens the same page.
 
-The page header carries a **countdown to the next quote poll** and, under it, the ISO timestamp of the last poll that actually returned prices — `last update 2026-08-31T17:52:06-04:00`. Both turn red together, and they mean one thing: what you are reading did not come from the last attempt. The countdown reddens as soon as an attempt fails; the timestamp is also red once nothing has succeeded for thirty minutes.
+The sidebar carries a **countdown to the next quote poll** and, under it, the ISO timestamp of the last poll that actually returned prices — `last update 2026-08-31T17:52:06-04:00`. Both turn red together, and they mean one thing: what you are reading did not come from the last attempt. The countdown reddens as soon as an attempt fails; the timestamp is also red once nothing has succeeded for thirty minutes.
 
-Beside them is **Refresh**, which runs a gap check and a quote poll immediately — the same two code paths a scheduled tick uses — and the countdown and timestamp move with its reply.
+Under them is **Refresh**, which runs a gap check and a quote poll immediately — the same two code paths a scheduled tick uses — and the countdown and timestamp move with its reply.
 
-The sidebar's **Watchlist backup** exports your symbols and targets to a JSON file, and imports one back. It exists because uninstalling a Chrome extension erases everything it stores — both storage areas, and the synced copy on Google's servers with them. No API survives that, so the only way a watchlist outlives a reinstall is a copy Chrome does not control. An import **merges**: symbols you already have keep their place and take the file's target, and anything new is appended, so restoring onto a populated list never destroys what is there.
+**Watchlist backup**, below the grid, exports your symbols and targets to a JSON file, and imports one back. It exists because uninstalling a Chrome extension erases everything it stores — both storage areas, and the synced copy on Google's servers with them. No API survives that, so the only way a watchlist outlives a reinstall is a copy Chrome does not control. An import **merges**: symbols you already have keep their place and take the file's target, and anything new is appended, so restoring onto a populated list never destroys what is there.
 
 The page is a sidebar plus a main panel. The sidebar holds one section today (*Tickers*, with a live count); it is built from a list so the next section is an array entry rather than a rewrite.
 

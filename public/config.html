@@ -13,14 +13,9 @@
           <span class="brand-name">Stock Ticker</span>
         </div>
         <div id="sidebar"></div>
-        <div class="backup">
-          <p class="backup-title">Watchlist backup</p>
-          <p class="backup-note">Uninstalling the extension erases everything it stores. Keep a copy.</p>
-          <div class="backup-actions">
-            <button id="export" type="button" class="link-button">Export</button>
-            <button id="import" type="button" class="link-button">Import</button>
-          </div>
-          <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" />
+        <div class="freshness">
+          <div id="freshness" class="freshness-lines" aria-live="off"></div>
+          <button id="refresh" type="button" class="refresh" title="Fetch prices now">Refresh</button>
         </div>
         <p class="sidebar-foot">Prices via Yahoo Finance, delayed ~15 min.</p>
       </aside>
@@ -31,16 +26,21 @@
             <h1 class="main-title">Tickers</h1>
             <p id="main-count" class="main-count"></p>
           </div>
-          <div class="main-tools">
-            <div class="freshness">
-              <div id="freshness" class="freshness-lines" aria-live="off"></div>
-              <button id="refresh" type="button" class="refresh" title="Fetch prices now">Refresh</button>
-            </div>
-            <div id="search"></div>
-          </div>
+          <div id="search"></div>
         </header>
         <div id="status" class="status"></div>
         <div id="main-body" class="main-body"></div>
+        <footer class="backup">
+          <div class="backup-text">
+            <p class="backup-title">Watchlist backup</p>
+            <p class="backup-note">Uninstalling the extension erases everything it stores, the synced copy included. Export a file first and an import brings the list back.</p>
+          </div>
+          <div class="backup-actions">
+            <button id="export" type="button" class="ghost-button">Export</button>
+            <button id="import" type="button" class="ghost-button">Import</button>
+          </div>
+          <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" />
+        </footer>
       </main>
     </div>
     <script src="config.js"></script>

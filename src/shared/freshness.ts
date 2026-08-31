@@ -30,8 +30,17 @@ export const SURFACE_HEARTBEAT_MS = 60 * 1000;
 
 /** A snapshot that has never been written is not stale — it is simply absent. */
 export function isStale(updatedAt: number, now: number = Date.now()): boolean {
-  if (updatedAt <= 0) return false;
+  if (!isTimestamp(updatedAt)) return false;
   return now - updatedAt >= STALE_AFTER_MS;
+}
+
+/**
+ * Guards both helpers below against a field that is not there. A snapshot
+ * written before `attemptedAt` existed still sits in storage after an update,
+ * and arithmetic on `undefined` renders as `NaN:NaN` rather than failing.
+ */
+function isTimestamp(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
 }
 
 /**
@@ -40,14 +49,14 @@ export function isStale(updatedAt: number, now: number = Date.now()): boolean {
  * tells the user nothing.
  */
 export function msUntilNextRefresh(updatedAt: number, now: number = Date.now()): number {
-  if (updatedAt <= 0) return 0;
+  if (!isTimestamp(updatedAt)) return 0;
   const remaining = updatedAt + QUOTE_PERIOD_MS - now;
   return Math.min(Math.max(remaining, 0), QUOTE_PERIOD_MS);
 }
 
 /** `0:47` — a countdown, so seconds are always two digits. */
 export function formatCountdown(ms: number): string {
-  const seconds = Math.ceil(ms / 1000);
+  const seconds = Number.isFinite(ms) ? Math.ceil(ms / 1000) : 0;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 

@@ -108,29 +108,39 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.backup { margin-top: auto; padding: 0 8px 12px; }
+.backup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
 
-.backup-title { margin: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--ink); }
+.backup-text { min-width: 0; }
 
-.backup-note { margin: 0 0 8px; font-size: 11px; line-height: 1.45; color: var(--ink-faint); }
+.backup-title { margin: 0 0 3px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
 
-.backup-actions { display: flex; gap: 14px; }
+.backup-note { margin: 0; max-width: 62ch; font-size: 12px; line-height: 1.5; color: var(--ink-faint); }
 
-.link-button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink-soft);
+.backup-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+
+.ghost-button {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
   cursor: pointer;
 }
 
-.link-button:hover { color: var(--ink); }
-.link-button:disabled { opacity: 0.5; cursor: default; }
+.ghost-button:hover { background: var(--porcelain); }
+.ghost-button:disabled { opacity: 0.5; cursor: default; }
 
 .visually-hidden {
   position: absolute;
@@ -164,11 +174,9 @@ body {
 
 /* ---------- freshness ---------- */
 
-.main-tools { display: flex; align-items: center; gap: 16px; }
+.freshness { margin-top: auto; display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 0 8px; }
 
-.freshness { display: flex; align-items: center; gap: 12px; }
-
-.freshness-lines { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.freshness-lines { display: flex; flex-direction: column; gap: 2px; }
 
 /* Tabular figures so a ticking countdown does not jitter the text beside it. */
 .freshness-countdown {
@@ -195,8 +203,8 @@ body {
 .freshness-stamp.is-bad { color: var(--red); }
 
 .refresh {
-  flex: 0 0 auto;
-  height: 34px;
+  align-self: flex-start;
+  height: 30px;
   padding: 0 14px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
@@ -548,8 +556,7 @@ body {
   .sidebar { position: static; height: auto; flex-direction: row; align-items: center; }
   .sidebar-foot { display: none; }
   .main-header { flex-direction: column; align-items: stretch; }
-  .main-tools { flex-direction: column; align-items: stretch; gap: 10px; }
-  .freshness { justify-content: space-between; }
+  .backup { flex-direction: column; align-items: flex-start; gap: 12px; }
   .search { width: 100%; }
 }
 
