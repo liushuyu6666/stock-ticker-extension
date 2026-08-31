@@ -293,36 +293,21 @@ storage what it is holding. It reads this list of symbols instead, and checks
 each name against the watchlist. The list fits neither category in the table
 above, and that is a wart.
 
-**The second machine is what makes that list load-bearing.** On the device where
-you press Remove it is nearly dead weight: `REMOVE_SYMBOL` deletes the watchlist
-entry and the series together and drops the name from the index in the same
-breath, so there is rarely anything left to find.
+**The second machine is what makes that list load-bearing.** There, a removal
+arrives as nothing more than a shorter watchlist — `history.remove()` is
+reachable only from a local click, so no code on that device is ever told that a
+symbol has lost its owner. It still has the name sitting in its index and the
+series sitting under its key, and `prune` is the only thing that will ever notice
+the mismatch: it walks the indexed **symbols**, finds one the watchlist no longer
+contains, and deletes that symbol's **series**. Without the list it would not know
+the name was there to check. A single-device user would barely notice if orphan
+detection stopped working; a two-device user would accumulate a dead series for
+every ticker they ever removed elsewhere.
 
-It earns its keep on the *other* machine. There the removal arrives as nothing
-more than a shorter watchlist — `history.remove()` is reachable only from a
-local click, so no code on that device is ever told that a symbol has lost its
-owner. That machine still has the name sitting in its index and the series
-sitting under its key, and `prune` is the only thing that will ever notice the
-mismatch: it walks the indexed **symbols**, finds one the watchlist no longer
-contains, and deletes that symbol's **series**. Without the list it would not
-know the name was there to check in the first place. A single-device user would
-barely notice if orphan detection stopped working; a two-device user would
-accumulate a dead series for every ticker they ever removed on the other
-machine.
-
-The trouble is what happens if it is lost. `cache:snapshot` is disposable
-because deleting it costs nothing — the next poll rebuilds it. Deleting
-`history:index` is not like that: `trackedSymbols()` returns empty, `prune`
-finds nothing stale and returns early, and **every orphan that existed at that
-moment becomes permanently invisible**. Later upserts only re-add watchlist
-symbols, which are by definition never orphans, so the list cannot recover what
-it forgot. It is derived data that cannot be re-derived — strictly worse than
-either column of the table above.
-
-Now that a full year of closes encodes to 2.7 KB, the original objection to
-`get(null)` has largely gone: reading ~23 KB once an hour to enumerate the real
-keys would be drift-free by construction, and would also catch orphans this
-index has already lost.
+Losing the list is unrecoverable: `prune` then finds nothing stale, and every
+existing orphan is invisible for good. Now that a year of closes encodes to
+2.7 KB, enumerating the real `history:` keys instead would cost ~23 KB an hour
+and be drift-free by construction.
 
 **`sync` versus `local`.** Two areas with different jobs, and the split is the
 single most load-bearing decision in this section:
