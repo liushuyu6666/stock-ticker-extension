@@ -268,6 +268,10 @@ Five keys, in two areas. The distinction that matters is **lifetime**: only two
 of them are authored by you or paid for with a network request, and the rest can
 be deleted at any moment without losing anything.
 
+Throughout this section, **a series** (one symbol's ordered run of daily closes,
+oldest first — the entire value stored under its `history:` key) is the unit
+being kept, merged or reclaimed.
+
 | Key | Area | Holds | Lifetime |
 |---|---|---|---|
 | `watchlist` | sync | symbols, targets, names, exchanges | **Permanent.** The only thing you author. Follows your Chrome profile |
@@ -284,6 +288,28 @@ stores none of it, which is why it can chart a symbol you have never tracked.
 So a ticker's cost is bounded and self-clearing: adding one creates exactly one
 history key, and removing it deletes that key in the same operation. Nothing
 accumulates for a ticker you no longer hold.
+
+#### Why orphans still happen
+
+A series with no ticker to belong to is an **orphan**, and `prune` exists to
+reclaim them. Removal really does delete the series — but only *on the device
+where you removed it*, which leaves three ways one can survive:
+
+1. **A second device.** The watchlist lives in `storage.sync` and travels
+   between your machines; history lives in `storage.local` and does not. Remove
+   AAPL on your laptop and your desktop receives the shorter watchlist, but its
+   `history:AAPL` sits in local storage with nothing to trigger a delete. This
+   is not a race — it is the guaranteed outcome of syncing one half of a pair,
+   and it is the reason `prune` is worth having at all.
+2. **The two deletes are not atomic.** `REMOVE_SYMBOL` drops the watchlist
+   entry and then the series, as two awaits. Chrome suspends MV3 workers
+   aggressively, so a suspension between them leaves the series behind.
+3. **Older installs.** Before the config page existed there was no way to remove
+   a ticker and no `history.remove()` to call, so anything stored by those
+   versions has never been cleaned up.
+
+`prune` runs on every history sync — hourly rather than only after a backfill —
+so in each case the series is reclaimed on the next pass rather than lingering.
 
 ### Size
 
