@@ -276,9 +276,29 @@ being kept, merged or reclaimed.
 |---|---|---|---|
 | `watchlist` | sync | symbols, targets, names, exchanges | **Permanent.** The only thing you author. Follows your Chrome profile |
 | `history:<SYMBOL>` | local | up to 260 dated closes, encoded | **Permanent for as long as the ticker is on the list.** Never expires, never trimmed by age — only removing the ticker deletes it, and removal deletes it immediately |
-| `history:index` | local | which symbols have a series | **Permanent.** Bookkeeping, so a series orphaned by a removal can still be found |
+| `history:index` | local | which symbols have a series | **Derived, but not self-healing** — see below. Shrinks as tickers are removed |
 | `cache:snapshot` | local | one render payload, 70 closes per row | **Disposable.** Delete it and the next poll rebuilds it from history plus one quote fetch |
 | `meta:lastConsumerSeenAt` | local | when a bar was last on screen | **Disposable.** Worst case, one skipped poll |
+
+**`history:index` does not fit either category, and that is a wart.** It exists
+because history is one key per symbol and the storage API in the Chrome version
+this targets cannot list keys by prefix: `get(null)` returns every key *with its
+whole value*, and `getKeys()` only arrived in Chrome 130. So `prune` cannot ask
+storage what it holds, and the index answers that question instead.
+
+The trouble is what happens if it is lost. `cache:snapshot` is disposable
+because deleting it costs nothing — the next poll rebuilds it. Deleting
+`history:index` is not like that: `trackedSymbols()` returns empty, `prune`
+finds nothing stale and returns early, and **every orphan that existed at that
+moment becomes permanently invisible**. Later upserts only re-add watchlist
+symbols, which are by definition never orphans, so the list cannot recover what
+it forgot. It is derived data that cannot be re-derived — strictly worse than
+either column of the table above.
+
+Now that a full year of closes encodes to 2.7 KB, the original objection to
+`get(null)` has largely gone: reading ~23 KB once an hour to enumerate the real
+keys would be drift-free by construction, and would also catch orphans this
+index has already lost.
 
 **`sync` versus `local`.** Two areas with different jobs, and the split is the
 single most load-bearing decision in this section:
