@@ -21,6 +21,11 @@ choose `dist/`.
 `yarn watch` rebuilds on save; use the reload button on the extension card to
 pick changes up. `yarn check` runs the type check and a clean build.
 
+`yarn package` writes `release/stock-ticker-extension-<version>.zip` with
+`manifest.json` at the archive root, ready for the Chrome Web Store. See
+[STORE_LISTING.md](STORE_LISTING.md) for the listing copy and permission
+justifications, and [PRIVACY.md](PRIVACY.md) for the privacy policy.
+
 # Where the bar appears
 
 A Chrome extension cannot draw into browser chrome, so the strip is page

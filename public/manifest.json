@@ -28,7 +28,7 @@
   ],
   "options_page": "config.html",
   "action": {
-    "default_title": "Stock Ticker options"
+    "default_title": "Stock Ticker \u2014 configure"
   },
   "icons": {
     "16": "icons/icon16.png",
