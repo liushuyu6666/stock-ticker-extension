@@ -171,12 +171,15 @@ The fetch **must** happen in the service worker. Yahoo sends no CORS headers,
 and only the worker's `host_permissions` grant bypasses that; the same call
 from a content script would fail.
 
-## The three threads
+## The three threads, and two sections that join them
 
-The three sections below follow a single chain: a **request** brings data in,
-some of it is **stored**, and what is **drawn** is downsampled from what is
-stored. A fourth section then walks that chain end to end, hop by hop. Nothing is drawn at a resolution it was not stored at, and nothing is
+The first three sections below follow a single chain: a **request** brings data
+in, some of it is **stored**, and what is **drawn** is downsampled from what is
+stored. Nothing is drawn at a resolution it was not stored at, and nothing is
 stored that no longer has an owner.
+
+The last two look at that chain from the outside: **§4** walks it end to end,
+hop by hop, and **§5** covers the clocks that decide when each hop happens.
 
 ```
                      ── stored ──────────────────   ── derived ────────────────
@@ -604,6 +607,64 @@ ever be, and why staleness is measured on the quote timestamp alone.
 **The dialog is off the chain entirely.** It fetches its own year on open, draws
 every session of it, and discards the lot on close. Nothing it downloads is
 stored, and nothing stored is consulted to draw it.
+
+## 5 · Three independent clocks — what actually moves the screen
+
+Section 1 lists five cadences. Three of them are what a user perceives, and
+keeping them separate is what makes the behaviour predictable:
+
+| Clock | Period | Decides |
+|---|---|---|
+| **The poll** | 10 min | *when the data changes* — the only one that fetches |
+| **The redraw** | irregular | *when the screen is rebuilt* — follows a snapshot actually arriving, so never more often than the poll |
+| **The age check** | 30 s on the bar, 1 s in the sidebar | *how bright the result is* — nothing else |
+
+Read that as a sentence: the poll decides when data changes, the redraw follows
+a snapshot actually arriving, and the age check only decides how bright the
+result is. They never call one another.
+
+### The redraw is guarded on one surface and not the other
+
+A snapshot lands in `chrome.storage.local`, `storage.onChanged` fires, and two
+listeners wake — one per surface. They then behave differently:
+
+| | Config card | Bar card |
+|---|---|---|
+| Listener | `ConfigApp.apply` | `TickerBar.update` |
+| Condition | **none** — every snapshot rebuilds the grid | only when the row **signature** changed |
+| Then | all cards rebuilt, 70 points drawn as published | track rebuilt, 70 downsampled to 28, then re-measured and re-cloned for the marquee |
+
+The bar needs the guard because rebuilding restarts the marquee mid-scroll,
+which reads as a jump. The config page has no animation to protect, so it does
+the simple thing.
+
+**A signature is a cheap fingerprint of the rows** — one string, compared
+against the last one drawn:
+
+```
+AAPL.TO:45.01:42:70|MSFT.TO:35.90:30:70|BTC-USD:77825.67:70555:70
+symbol :price:target:points
+```
+
+Same string, return immediately. Different, rebuild. It is a poor man's deep
+equality: comparing two strings costs far less than walking the objects, and
+nothing at all beside rebuilding the DOM and re-measuring the track. The same
+trick guards a different cost one layer up, in `TickerService.publish`, where
+`JSON.stringify(rows) + error` decides whether the snapshot is worth *writing*
+at all.
+
+One known gap in it: the bar's fingerprint carries `closes.length`, not the
+close values. Once a series reaches the 260 cap that length stops changing, so a
+new daily bar arriving while the price happens to be unchanged does not repaint
+the line — it catches up the next time the price moves. The worst case is an
+overnight lag of one bar, on the bar's chart only.
+
+### The age check is not in that path at all
+
+It runs on its own timer, subtracts `updatedAt` from the clock, and toggles one
+class. It reads no storage, sends no message, rebuilds nothing — `opacity: 0.55`
+is the compositor drawing an existing layer differently. That is why making it
+less frequent would save nothing measurable: it is not what costs.
 
 # Design notes
 
