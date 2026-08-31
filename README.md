@@ -53,35 +53,6 @@ Targets are yours to set. Analyst consensus targets sit behind an authenticated 
 
 # How it works
 
-Everything that touches the network or storage runs in the service worker. The UI surfaces are renderers that receive rows and paint them.
-
-```
-background (service worker)
-  RefreshScheduler ──drives──► TickerService
-                                 │
-        ┌────────────────────────┼──────────────────┐
-        ▼                        ▼                  ▼
-   QuoteProvider            HistoryStore     WatchlistRepository
-   └ YahooQuoteProvider     └ LocalHistoryStore
-   SymbolSearch  (search = dropdown, lookup = full results)
-   └ YahooSymbolSearch
-  MessageRouter  ◄── chrome.runtime.onMessage
-        ▲
-        │  request / storage.onChanged
-  ┌─────┴──────────────────┐   ┌───────────────────────────────┐
-  │ content script          │   │ config page                   │
-  │   TickerClient          │   │   ConfigApp                   │
-  │   TickerBar → StockCard │   │    ├ SidebarNav               │
-  │            → sparkline  │   │    ├ SymbolSearchBox          │
-  └─────────────────────────┘   │    ├ TickerGrid → TickerCard  │
-                                │    ├ SearchResultsView        │
-                                │    ├ TickerDetailDialog       │
-                                │    └ ConfirmDialog            │
-                                └───────────────────────────────┘
-```
-
-`TickerService` depends only on the three interfaces, never on Yahoo or on a storage backend directly — which is what makes either one swappable. The UI classes never import a provider: `TickerBar`/`TickerCard` are pure renderers over `TickerRow`, and `TickerClient`/`ConfigApp` are the only things that know the worker exists.
-
 ## Data source
 
 Yahoo Finance's `spark` endpoint, which returns the live price *and* the daily close series in one batched call:
@@ -104,23 +75,79 @@ Prices are delayed roughly 15 minutes on most exchanges.
 
 The fetch **must** happen in the service worker. Yahoo sends no CORS headers, and only the worker's `host_permissions` grant bypasses that; the same call from a content script would fail.
 
-## The three threads, and two sections that join them
 
-The first three sections below follow a single chain: a **request** brings data in, some of it is **stored**, and what is **drawn** is downsampled from what is stored. Nothing is drawn at a resolution it was not stored at, and nothing is stored that no longer has an owner.
+## Data flow
 
-The last two look at that chain from the outside: **§4** walks it end to end, hop by hop, and **§5** covers the clocks that decide when each hop happens.
+Three storages carry the data, and they are named the same way everywhere below:
+
+| Name used here | Key | Holds |
+|---|---|---|
+| **the 260-point pool** | `history:<SYMBOL>`, one per ticker (local) | up to 260 dated daily closes — the durable copy |
+| **the 70-point payload** | `cache:snapshot` (local) | one joined row per ticker, each carrying 70 closes — what the UI reads |
+| **the watchlist** | `watchlist` (sync) | the user's symbols, targets, and labels |
+
+### Snapshot
+
+Snapshot is the core of the data flow. One row of the 70-point payload looks like this:
 
 ```
-                     ── stored ──────────────────   ── derived ────────────────
-Yahoo ──request──▶   history:<SYMBOL>   ──────────▶ cache:snapshot ──▶ bar / card
-                     260 dated closes               70 closes/row       28 points
-                     permanent per ticker           disposable          never stored
-
-Yahoo ──request──▶   (nothing stored)  ─────────────────────────────▶ detail dialog
-                                                                       every session
+{ symbol, name, exchange,   ← from the watchlist (sync)
+  targetPrice,              ← from the watchlist
+  price, trend,             ← from the quote just fetched
+  closes: [70 points] }     ← downsampled from the 260-point pool
 ```
 
-## 1 · Network calls — what triggers a request, and what it leaves behind
+`TickerBar` fingerprints it one row at a time — `${row.symbol}:${row.price ?? ''}:${row.targetPrice}:${row.closes.length}`, joined by `|`.
+
+The payload has two scheduled sources — the quote poll and the history gap check — plus the on-demand paths further down.
+
+### Scheduled flow
+
+- **Data from Yahoo**
+  - The **history gap check** runs hourly, and does not reach the network until a symbol's newest stored bar is older than the last trading day. When one is, it fetches the smallest range covering the gap and upserts the bars by date into the 260-point pool. Since a trading day produces one bar, that works out to roughly one fetch a day: the remaining 23 hourly checks find every symbol already up to date and stop at a local read.
+  - The **quote poll** runs every 10 min. It fetches the price alone, then re-reads the 260-point pool on every run, downsamples 260 → 70 and joins it with the fresh price. Being the faster of the two, it is what carries a new bar into the payload — the gap check never writes one there.
+    - It runs only while a **surface (the bar injected into a page, and the config page in its own tab)** is on screen, each one pinging the worker every 60s to say so. With none open the alarm still fires and does nothing, so prices simply stop moving until a surface appears. The gap check has no such gate — it keeps the pool current whether or not anything is watching.
+- **Snapshot** — the join is published to `cache:snapshot`, and the write is skipped when nothing in the rows changed. That write is also how every surface hears about it: each one listens on `chrome.storage.onChanged`.
+- **How the two sparklines use it** — both draw from the same 70 closes in the payload, and neither ever reads the 260-point pool.
+  - The **config page card** redraws whenever a new payload is published — so on a page left open, roughly every 10 minutes, not only when the tab is first opened. The whole grid is rebuilt and all 70 points are drawn.
+  - The **ticker bar card** redraws only when the signature changed, downsampling 70 → 28 at draw time. The guard is there because a rebuild restarts the marquee mid-scroll.
+
+### On-demand flow
+
+Driven by a click or a keystroke rather than by an alarm. None of it is on a schedule, and only the first two write anything.
+
+- **Adding a ticker** — the symbol and target go into the watchlist (sync), a gap check runs immediately to backfill a year into the 260-point pool, and a quote poll follows, so the card appears already populated rather than waiting up to an hour for its sparkline.
+- **Editing a target, removing a ticker** — no network at all. `TickerService.rebuild()` re-joins the watchlist and the pool onto the prices already in the payload and republishes. A removal also deletes that symbol's pool entry, since nothing references it any more; the payload itself is not deleted, only republished without that row.
+- **Opening a ticker's details** — its own `range=1y` fetch, ~251 points drawn at full resolution, touching neither storage. The hover crosshair costs nothing further: it reads the series already in hand.
+- **Search and "view all"** — two different endpoints, nothing stored either way. Results live in the dropdown's DOM or the results view's memory until you navigate away.
+- **Browser startup and manual refresh** — not a separate path. Both run a gap check followed by a quote poll, the same two code paths the scheduled flow uses.
+
+## Three independent clocks — what actually moves the screen
+
+Five cadences run in all — *Network calls* below lists them. Three are what a user perceives, and keeping those three separate is what makes the behaviour predictable:
+
+| Clock | Period | Decides |
+|---|---|---|
+| **The quote poll** | 10 min | when the data changes — the only one of the three that fetches; see [Scheduled flow](#scheduled-flow) |
+| **The redraw** | irregular | when the screen is rebuilt — it follows a payload being published, so it can never run more often than the poll; see [Scheduled flow](#scheduled-flow) |
+| **The age check** | 30 s on the bar, 1 s in the sidebar | how what is already on screen is presented — it dims prices that have stopped arriving, and nothing else |
+
+Read that as a sentence: the poll decides when data changes, the redraw follows a payload actually being published, and the age check only decides how bright the result is. They never call one another.
+
+### What the age check actually does
+
+Sometimes Yahoo throws — a 429 for asking too often, a 5xx, or nothing at all because the laptop was asleep and the alarm never ran. The poll then has no valid price, and rather than blanking the strip the extension republishes the rows it already had. That is the right default, and also the problem: a frozen price looks exactly like a live one.
+
+The age check is what notices. `updatedAt` is the timestamp of the last *successful* quote fetch, and a failed poll leaves it untouched, so the test is one subtraction — `now − updatedAt` against `STALE_AFTER_MS`, thirty minutes. Past that, every card in the bar drops to `opacity: 0.55` and the sidebar countdown turns red, reading `prices 34 min old`. Nothing is rebuilt: one class is toggled and the compositor draws the existing layer differently, which is why running the check less often would save nothing.
+
+Thirty minutes is three polls. Anything at or below the ten-minute period would dim the bar through most of every cycle, since a payload is almost a full period old just before the next one lands.
+
+
+## The three threads
+
+Three sections, following a single chain: a **request** brings data in, some of it is **stored**, and what is **drawn** is downsampled from what is stored. Nothing is drawn at a resolution it was not stored at, and nothing is stored that no longer has an owner. *Data flow* above walks that chain end to end; these three go into each link of it.
+
+### 1 · Network calls — what triggers a request, and what it leaves behind
 
 Six triggers, and nothing else reaches the network. Two run on a clock; the other four are the user's own doing.
 
@@ -143,42 +170,28 @@ Six triggers, and nothing else reaches the network. Two run on a clock; the othe
 | **30 min** | how old a snapshot gets before the UI stops presenting it as live | `STALE_AFTER_MS` |
 | **60 min** | the history gap check — a local read that usually ends there | `HISTORY_PERIOD_MINUTES` |
 
-The ordering is load-bearing in two places. The **heartbeat is finer than the consumer window** (1 min against 5), so an open surface can never fall out of it through clock drift — invert those two and the poll would stop under a bar that is plainly on screen. And **staleness is a multiple of the poll** (30 min against 10), because a threshold at or below the period would leave the bar dimmed through most of every cycle: a snapshot is by definition almost a full period old just before the next one lands.
+The ordering is load-bearing in one place in particular: the **heartbeat is finer than the consumer window** (1 min against 5), so an open surface can never fall out of it through clock drift — invert those two and the poll would stop under a bar that is plainly on screen.
 
 Two things the *Stored afterwards?* column makes plain:
 
 - **Only the two scheduled calls persist anything.** Everything driven by a click or a keystroke — search, lookup, preview — is read-only against storage, which is why browsing around the config page cannot grow the extension's footprint.
 - **The detail dialog throws away a full year it just downloaded.** It could upsert those bars into `history:<SYMBOL>`, but only for a symbol already on the watchlist, and the hourly sync maintains that series anyway. Writing there would mean a click-driven path competing with the scheduled one for the same keys, which is not worth the saving.
 
-Browser startup and the manual refresh also run a gap check followed by a quote poll, on the same two code paths.
-
-**The two kinds of data age differently** — a live price is stale within a minute, a closed day's close is never stale at all — so they run on separate clocks. The hourly one is deliberately a gap check rather than a wall-clock schedule: a fixed time assumes the browser happens to be running at that moment, whereas asking "is my newest bar older than the last trading day?" self-heals after a weekend or a sleeping laptop.
-
-**History is fetched once and then reused.** The year downloaded when a ticker is added is what the carousel draws for the life of that ticker; the per-minute poll fetches only the price and joins it against the stored series with a local read. It is written with an **upsert keyed by date**, never an append, so a missed day, a double-fired alarm, and a manual refresh all converge to the same series instead of duplicating it.
+**The hourly check is a gap check rather than a wall-clock schedule.** A fixed time assumes the browser happens to be running at that moment, whereas asking "is my newest bar older than the last trading day?" self-heals after a weekend or a sleeping laptop. What it writes is an **upsert keyed by date**, never an append, so a missed day, a double-fired alarm and a manual refresh all converge on the same series instead of duplicating it.
 
 **Requests are sized to the gap, and skipped when there is none.** A symbol one trading day behind is topped up with `range=5d` — 8 KB across a seven-symbol watchlist, against 38.9 KB for `range=1y`. Stale symbols are grouped by the window they need, so the steady-state daily sync is a single `5d` request no matter how many tickers are on the list, and only a genuinely long absence widens it. Under-fetching would leave a silent hole in the series, so each threshold sits well inside its window; over-fetching only costs bytes.
 
-**Not every change needs a quote.** Editing a target price or removing a ticker goes through `TickerService.rebuild()`, which re-joins the watchlist and stored history onto the prices already in the snapshot without touching the network. A target is the user's own number: it changes which side of the line a row falls on, not what the market says.
-
 ### When a price stops arriving
-
-A poll can fail: Yahoo throttles the caller (`HTTP 429`), the laptop sleeps, the worker never wakes. In all of those the snapshot keeps its last good rows and the bar goes on rendering them, which is the right default — a blank strip helps nobody. What it leaves behind is a frozen number that looks exactly like a live one. On a symbol that trades around the clock, that is a lie by omission.
 
 Three signals, coarse to specific:
 
 | Where | Signal | Trigger |
 |---|---|---|
-| The bar | every card fades to 55% opacity | the snapshot is **30 minutes** old |
+| The bar | every card fades to 55% opacity | the payload is **30 minutes** old |
 | The config sidebar | `next refresh 7:12`, counting down; once stale, a red `prices 34 min old` | the same 30-minute threshold |
 | A config card | a red `!` in its top-right corner | the **last** refresh threw |
 
-The two triggers are deliberately different things. `snapshot.error` is precise but narrow — set only when an attempt actually failed, silent when no attempt was made at all. The age of `updatedAt` catches both, because it measures what the reader actually cares about: how old this number is, not whether the last try raised.
-
-**Thirty minutes — three polls deep, and it has to be expressed that way.** A threshold at or below the 10-minute period would dim the bar through most of every cycle, since a snapshot is almost a full period old just before the next one arrives. One missed poll is noise: a late alarm, a suspended worker, one unlucky request. Three consecutive misses is a condition.
-
-**Both surfaces run their own clock**, because staleness arrives with the passage of time rather than with a new snapshot — and when refreshes keep failing the worker stops writing altogether, since `publish` skips a byte-identical payload. Nothing would wake a listener. So `TickerBar` re-checks every 15 seconds and the sidebar clock ticks every second, both reading the same `updatedAt` they were last handed.
-
-The countdown is also what makes the consumer rule visible. The poll only runs while some surface has asked for a snapshot in the last five minutes, so the config page re-asks every minute exactly as the bar does. Without that, a config page left open on its own would show a countdown to a refresh that had quietly stopped happening.
+The first two are the age check, described above. The third is a different trigger: `snapshot.error` is precise but narrow — set only when an attempt actually failed, silent when no attempt was made at all — whereas the age of `updatedAt` catches both, because it measures how old the number is rather than whether the last try raised.
 
 ### Planned: configurable refresh
 
@@ -194,7 +207,7 @@ There is deliberately **no wall-clock schedule** among these — no "fetch at 16
 
 Settings belong in `chrome.storage.sync` beside the watchlist, and `RefreshScheduler.install()` needs to re-create its alarms whenever they change, since `chrome.alarms.create` on an existing name replaces the schedule.
 
-## 2 · Storage — what is permanent, what is disposable
+### 2 · Storage — what is permanent, what is disposable
 
 Five keys, in two areas. The distinction that matters is **lifetime**: only two of them are authored by you or paid for with a network request, and the rest can be deleted at any moment without losing anything.
 
@@ -223,9 +236,7 @@ Losing the list is unrecoverable: `prune` then finds nothing stale, and every ex
 | Write rate | capped (~1,800/hour, 120/min) | uncapped |
 | Holds here | the watchlist — what you authored | history and caches — what was fetched |
 
-The rule of thumb: **`sync` is for intent, `local` is for data.** Which tickers you follow and what you consider a fair price are decisions worth carrying to another machine; a year of Microsoft closes is not, since any machine can refetch it in one request. That split is also why label writes are skipped unless something changed — a per-minute poll writing unconditionally would sit at `sync`'s rate ceiling all day.
-
-**What the sparklines are drawn from:** the bar and the config card both read `cache:snapshot` — never the history keys directly, and never the network. The detail dialog is the exception: it fetches its own full-resolution year and stores none of it, which is why it can chart a symbol you have never tracked.
+The rule of thumb: **`sync` is for intent, `local` is for data.** Which tickers you follow and what you consider a fair price are decisions worth carrying to another machine; a year of Microsoft closes is not, since any machine can refetch it in one request. That split is also why label writes are skipped unless something changed — a poll writing unconditionally would sit at `sync`'s rate ceiling all day.
 
 So a ticker's cost is bounded and self-clearing: adding one creates exactly one history key, and removing it deletes that key in the same operation. Nothing accumulates for a ticker you no longer hold.
 
@@ -257,7 +268,7 @@ The quota is **per extension**, not shared with other extensions or with any web
 
 1. **The snapshot stores a render payload, not a second copy of history.** It used to carry every symbol's full close series — a duplicate of the history store, rewritten on every quote poll. It now carries the series downsampled to 70 points, which is the most any surface can draw. The card's sparkline is bit-identical as a result; the bar's shifts imperceptibly, since it samples 28 points from 70 rather than from 251.
 2. **History is capped at one trading year** (`MAX_HISTORY_BARS = 260`), not the arbitrary 400 it used to be. 400 bars is ~1.6 years — storage a one-year sparkline could never show, and which would have quietly stretched the chart's span past a year once it filled.
-3. **An unchanged snapshot is not rewritten.** Markets are shut for roughly three quarters of the week, and through all of it the poll would otherwise store a byte-identical payload every minute and wake every open surface to re-render it.
+3. **An unchanged snapshot is not rewritten.** Markets are shut for roughly three quarters of the week, and through all of it the poll would otherwise store a byte-identical payload on every run and wake every open surface to re-render it.
 4. **Pruning runs on every history sync**, not only when a backfill happened, so a series orphaned by a removal that raced the worker's suspension is reclaimed on the next pass rather than lingering indefinitely.
 5. **Series are stored as a start date plus whole-day offsets**, not as one `{date, close}` object per bar. Repeating a key name and a full ISO string on every one of ~250 bars cost about three quarters of the payload: a year of closes drops from 9.3 KB to 2.7 KB. Offsets are *not* assumed contiguous — weekends and holidays simply produce a jump — and the decoded shape callers see is unchanged, so the encoding stays private to `LocalHistoryStore`. `lastBarDate` reads the last offset straight off the encoded form rather than rebuilding a few hundred objects to look at one, which matters because the hourly gap check asks it for every symbol. A `v` marker tags the format, and the legacy array still decodes, so an existing install migrates silently on each symbol's next upsert.
 
@@ -265,7 +276,7 @@ One thing deliberately *not* done: rounding stored closes. The `spark` endpoint 
 
 A MongoDB-backed `HistoryStore` was considered and deliberately deferred: it would need a local HTTP service (MV3 has no TCP sockets), which turns a self-contained extension into one that shows empty sparklines whenever a daemon is not running. It earns its place only for intraday resolution, history beyond Yahoo's window, or other consumers — and the interface is already in place for that day.
 
-## 3 · Sparkline density — where each chart's points come from
+### 3 · Sparkline density — where each chart's points come from
 
 A year is ~251 daily closes, but almost nowhere should draw all of them. Each size declares its own **point budget** — the series is evenly downsampled to that many points before the path is built.
 
@@ -287,9 +298,9 @@ Each number was chosen the same way — render a year of real closes across five
 
 Drawing every session there is not just cosmetic. It is what lets the **hover crosshair** land on a real trading day: a point index *is* a session index, so the date under the cursor needs no separate lookup and no interpolation between sampled points. At 436px that works out to ~1.7px per session.
 
-### How often each one is redrawn — and why staleness is not its business
+### How often each one is redrawn
 
-Density and redraw rate are independent. A budget answers *how many points get drawn*; it says nothing about *how often*, and the three sizes do not check or poll on schedules of their own. What differs between them is what feeds them, and how often that feed changes:
+Density and redraw rate are independent. A budget answers *how many points get drawn*, never *how often*. What differs between the three is what feeds them, and how often that feed changes:
 
 | Where | Redrawn when | In practice |
 |---|---|---|
@@ -299,87 +310,8 @@ Density and redraw rate are independent. A budget answers *how many points get d
 
 The important line there is the middle one. **The quote poll cannot change a sparkline** — it fetches `range=1d` and reads a price out of the meta block, never a close series. Only the hourly gap check adds a bar, and it adds one only when a trading day has ended. So the bar's chart is redrawn far more often than it changes.
 
-**The age check does not apply to the line at all.** A close from yesterday is not stale — it is final, and it will read the same a year from now. What goes stale is the *price*, and the ten-minute rule is entirely about that. The sparkline dims along with everything else on a stale card only because the card is one object: the number on it is untrustworthy, so the whole thing recedes rather than presenting a live-looking chart beside a frozen price.
-
-That is also why staleness is measured on `updatedAt` — the timestamp of the last *quote* fetch — and not on the newest bar's date. Judging freshness by the series would call every watchlist stale all weekend, when nothing is wrong.
-
 `SNAPSHOT_SERIES_POINTS` does double duty: it is also the cap on what the published snapshot stores, so the largest thing routinely drawn and the most that is kept are one constant rather than two that can drift. The detail dialog exceeds it only because it fetches its own full-resolution year on demand.
 
-## 4 · Data flow
-
-Three storages carry the data, and they are named the same way everywhere below:
-
-| Name used here | Key | Holds |
-|---|---|---|
-| **the 260-point pool** | `history:<SYMBOL>`, one per ticker (local) | up to 260 dated daily closes — the durable copy |
-| **the 70-point payload** | `cache:snapshot` (local) | one joined row per ticker, each carrying 70 closes — what the UI reads |
-| **the watchlist** | `watchlist` (sync) | the user's symbols, targets, and labels |
-
-### Snapshot
-
-Snapshot is the core of the data flow. One row of the 70-point payload looks like this:
-
-```
-{ symbol, name, exchange,   ← from the watchlist (sync)
-  targetPrice,              ← from the watchlist
-  price, trend,             ← from the quote just fetched
-  closes: [70 points] }     ← downsampled from the 260-point pool
-```
-
-`TickerBar` fingerprints it one row at a time — `${row.symbol}:${row.price ?? ''}:${row.targetPrice}:${row.closes.length}`, joined by `|` — and redraws only when that string changes.
-
-Besides some other on-demand poll, snapshot has two sources — the quote poll and the history gap check.
-
-### Flow
-
-- **Data from Yahoo**
-  - The **history gap check** runs hourly, and does not reach the network until a symbol's newest stored bar is older than the last trading day. When one is, it fetches the smallest range covering the gap and upserts the bars by date into the 260-point pool. Since a trading day produces one bar, that works out to roughly one fetch a day: the remaining 23 hourly checks find every symbol already up to date and stop at a local read.
-  - The **quote poll** runs every 10 min. It fetches the price alone, then re-reads the 260-point pool on every run, downsamples 260 → 70 and joins it with the fresh price. Being the faster of the two, it is what carries a new bar into the payload — the gap check never writes one there.
-- **Snapshot** — the join is published to `cache:snapshot`, and the write is skipped when nothing in the rows changed. That write is also how every surface (the bar injected into a page, and the config page in its own tab) hears about it: each one listens on `chrome.storage.onChanged`.
-
-  The obvious alternative is a long-lived `chrome.runtime` port from each surface to the worker. It does not survive Manifest V3, where the worker is torn down whenever it goes idle and takes every open port with it. A storage key has no lifetime to lose: the worker writes and exits, the surface is notified whenever that happens, and nothing needs to stay alive in between.
-- **How the two sparklines use it** — both draw from the same 70 closes in the payload, and neither ever reads the 260-point pool.
-  - The **config page card** redraws whenever a new payload is published — so on a page left open, roughly every 10 minutes, not only when the tab is first opened. The whole grid is rebuilt and all 70 points are drawn.
-  - The **ticker bar card** redraws only when the signature changed, downsampling 70 → 28 at draw time. The guard is there because a rebuild restarts the marquee mid-scroll.
-
-## 5 · Three independent clocks — what actually moves the screen
-
-Section 1 lists five cadences. Three of them are what a user perceives, and keeping them separate is what makes the behaviour predictable:
-
-| Clock | Period | Decides |
-|---|---|---|
-| **The poll** | 10 min | *when the data changes* — the only one that fetches |
-| **The redraw** | irregular | *when the screen is rebuilt* — follows a snapshot actually arriving, so never more often than the poll |
-| **The age check** | 30 s on the bar, 1 s in the sidebar | *how bright the result is* — nothing else |
-
-Read that as a sentence: the poll decides when data changes, the redraw follows a snapshot actually arriving, and the age check only decides how bright the result is. They never call one another.
-
-### The redraw is guarded on one surface and not the other
-
-A snapshot lands in `chrome.storage.local`, `storage.onChanged` fires, and two listeners wake — one per surface. They then behave differently:
-
-| | Config card | Bar card |
-|---|---|---|
-| Listener | `ConfigApp.apply` | `TickerBar.update` |
-| Condition | **none** — every snapshot rebuilds the grid | only when the row **signature** changed |
-| Then | all cards rebuilt, 70 points drawn as published | track rebuilt, 70 downsampled to 28, then re-measured and re-cloned for the marquee |
-
-The bar needs the guard because rebuilding restarts the marquee mid-scroll, which reads as a jump. The config page has no animation to protect, so it does the simple thing.
-
-**A signature is a cheap fingerprint of the rows** — one string, compared against the last one drawn:
-
-```
-AAPL.TO:45.01:42:70|MSFT.TO:35.90:30:70|BTC-USD:77825.67:70555:70
-symbol :price:target:points
-```
-
-Same string, return immediately. Different, rebuild. It is a poor man's deep equality: comparing two strings costs far less than walking the objects, and nothing at all beside rebuilding the DOM and re-measuring the track. The same trick guards a different cost one layer up, in `TickerService.publish`, where `JSON.stringify(rows) + error` decides whether the snapshot is worth *writing* at all.
-
-One known gap in it: the bar's fingerprint carries `closes.length`, not the close values. Once a series reaches the 260 cap that length stops changing, so a new daily bar arriving while the price happens to be unchanged does not repaint the line — it catches up the next time the price moves. The worst case is an overnight lag of one bar, on the bar's chart only.
-
-### The age check is not in that path at all
-
-It runs on its own timer, subtracts `updatedAt` from the clock, and toggles one class. It reads no storage, sends no message, rebuilds nothing — `opacity: 0.55` is the compositor drawing an existing layer differently. That is why making it less frequent would save nothing measurable: it is not what costs.
 
 # Design notes
 
