@@ -285,14 +285,6 @@ names — `["AAPL", "MSFT", "NVDA"]` — and nothing more: no dates, no closes, 
 part of the series themselves. Its whole job is to answer one question, *which
 symbols currently have a series stored on this device?*
 
-It has to exist because each series lives under its own key — `history:AAPL`,
-`history:MSFT`, and so on — and the storage API in the Chrome version this
-targets cannot list keys by prefix: `get(null)` returns every key *with its whole
-value*, and `getKeys()` only arrived in Chrome 130. So `prune` has no way to ask
-storage what it is holding. It reads this list of symbols instead, and checks
-each name against the watchlist. The list fits neither category in the table
-above, and that is a wart.
-
 **The second machine is what makes that list load-bearing.** There, a removal
 arrives as nothing more than a shorter watchlist — `history.remove()` is
 reachable only from a local click, so no code on that device is ever told that a
