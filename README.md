@@ -286,6 +286,18 @@ this targets cannot list keys by prefix: `get(null)` returns every key *with its
 whole value*, and `getKeys()` only arrived in Chrome 130. So `prune` cannot ask
 storage what it holds, and the index answers that question instead.
 
+**The second machine is what makes it load-bearing.** On the device where you
+press Remove, the index is nearly dead weight: `REMOVE_SYMBOL` deletes the
+watchlist entry and the series together, so there is rarely anything left to
+find. It earns its keep on the *other* machine. There, the removal arrives as
+nothing more than a shorter watchlist — `history.remove()` is reachable only
+from a local click, so no code on that device is ever told which series just
+lost its owner. `prune` is the only thing that will ever reclaim it, and the
+index is the only way `prune` knows the series is sitting there. A single-device
+user would barely notice if orphan detection stopped working; a two-device user
+would accumulate a dead series for every ticker they ever removed on the other
+machine.
+
 The trouble is what happens if it is lost. `cache:snapshot` is disposable
 because deleting it costs nothing — the next poll rebuilds it. Deleting
 `history:index` is not like that: `trackedSymbols()` returns empty, `prune`
