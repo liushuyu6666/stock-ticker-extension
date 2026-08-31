@@ -1,3 +1,4 @@
+import { SURFACE_HEARTBEAT_MS } from '../shared/freshness';
 import { STORAGE_KEYS, sendMessage } from '../shared/messages';
 import type { TickerSnapshot } from '../shared/types';
 
@@ -8,7 +9,7 @@ import type { TickerSnapshot } from '../shared/types';
  */
 export class TickerClient {
   /** Re-announces this bar so the worker keeps polling while it is on screen. */
-  private static readonly HEARTBEAT_MS = 60_000;
+  private static readonly HEARTBEAT_MS = SURFACE_HEARTBEAT_MS;
 
   private listener: ((snapshot: TickerSnapshot) => void) | null = null;
 

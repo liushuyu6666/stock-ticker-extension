@@ -175,7 +175,7 @@ from a content script would fail.
 
 The three sections below follow a single chain: a **request** brings data in,
 some of it is **stored**, and what is **drawn** is downsampled from what is
-stored. Nothing is drawn at a resolution it was not stored at, and nothing is
+stored. A fourth section then walks that chain end to end, hop by hop. Nothing is drawn at a resolution it was not stored at, and nothing is
 stored that no longer has an owner.
 
 ```
@@ -195,26 +195,31 @@ other four are the user's own doing.
 
 | Trigger | Frequency | Request | Stored afterwards? | Notes |
 |---|---|---|---|---|
-| **Quote poll** | **Every 1 min** — `QUOTE_PERIOD_MS`, the floor Chrome clamps alarms to. Runs only while a surface is on screen | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. A mounted bar and an open config page each re-announce themselves every minute; if nothing has asked for a snapshot in 5 minutes the alarm still fires and does nothing |
+| **Quote poll** | **Every 10 min** — `QUOTE_PERIOD_MS`. Chrome's alarm floor is 1 min; this sits well above it, because Yahoo's quotes are ~15 min delayed and polling far inside that window buys freshness the upstream does not have. Runs only while a surface is on screen | `spark?range=1d` | **Yes, overwritten.** Prices land in `cache:snapshot` (local), rewritten only when a row actually changed. Names and exchanges are written back to `watchlist` (sync) only when one of them changed | Price only. A mounted bar and an open config page each re-announce themselves every minute — ten times finer than the poll, so the 5-minute consumer window is never missed by a drifting clock. If nothing has asked for a snapshot in 5 minutes the alarm still fires and does nothing |
 | **History gap check** | **Every 60 min** — `HISTORY_PERIOD_MINUTES`. In network terms **about once per trading day**: 23 of every 24 ticks find no gap and touch nothing | `spark?range=5d…1y` | **Yes, merged.** Bars upserted by date into `history:<SYMBOL>` (local), capped at 260 | A *gap check*, not a fetch. It reads each symbol's newest stored bar locally and calls out only when one is older than the last trading day. The range is the smallest window covering the gap: `5d` for a routine daily top-up, widening to `1mo`/`3mo`/`1y` after a long absence |
 | **Typing in the search box** | On demand — at most one per typing *pause*, debounced 220 ms | `v1/finance/search` | **No** — lives in the dropdown's DOM, gone when it closes | Seven results, capped upstream by `quotesCount` |
 | **Adding a ticker** | Once per ticker added | `spark?range=1y` | **Yes, merged** — same `history:<SYMBOL>` path, plus the watchlist entry in sync | Immediate backfill, so the sparkline is populated by the time the card appears |
 | **"View all" / Enter** | Once per query, not per row | `v1/finance/lookup` | **No** — held in memory by the results view so the exchange filter can work without refetching, discarded on navigating away | The long results list. A *different* endpoint from the dropdown's, because that one returns seven rows and ignores a larger `quotesCount` — verified against the live API. `lookup` honours `count` into the dozens and carries a price and day change per row |
 | **Opening a ticker's details** | Once per open | `spark?range=1y` | **No** — rendered and discarded, including its full-resolution year | One call yields both the dialog's numbers (day and 52-week range, day change) and its full-resolution year, for any symbol — including one not on the watchlist. The hover crosshair then costs nothing: it reads the series already in hand |
 
-**The four cadences, and how they relate.** Only the first sends anything; the
+**The five cadences, and how they relate.** Only two of them send anything; the
 rest govern when it is worth sending, and how what arrives is presented.
 
 | Interval | What it governs | Where |
 |---|---|---|
-| **1 min** | the quote poll — the only recurring request | `QUOTE_PERIOD_MS` |
+| **1 min** | how often a mounted surface re-announces itself to the worker | `SURFACE_HEARTBEAT_MS` |
 | **5 min** | how long after a surface last spoke up the poll keeps running | `RefreshScheduler.CONSUMER_IDLE_MS` |
-| **10 min** | how old a snapshot gets before the UI stops presenting it as live | `STALE_AFTER_MS` |
+| **10 min** | the quote poll — one of the two recurring requests | `QUOTE_PERIOD_MS` |
+| **30 min** | how old a snapshot gets before the UI stops presenting it as live | `STALE_AFTER_MS` |
 | **60 min** | the history gap check — a local read that usually ends there | `HISTORY_PERIOD_MINUTES` |
 
-Each sits well clear of the one above it, and that spacing is the point: the
-staleness threshold is ten polls deep so a single missed minute never trips it,
-and the idle timeout is five polls deep so a tab switch does not stop the clock.
+The ordering is load-bearing in two places. The **heartbeat is finer than the
+consumer window** (1 min against 5), so an open surface can never fall out of it
+through clock drift — invert those two and the poll would stop under a bar that
+is plainly on screen. And **staleness is a multiple of the poll** (30 min
+against 10), because a threshold at or below the period would leave the bar
+dimmed through most of every cycle: a snapshot is by definition almost a full
+period old just before the next one lands.
 
 Two things the *Stored afterwards?* column makes plain:
 
@@ -270,8 +275,8 @@ Three signals, coarse to specific:
 
 | Where | Signal | Trigger |
 |---|---|---|
-| The bar | every card fades to 55% opacity | the snapshot is **10 minutes** old |
-| The config sidebar | `next refresh 0:47`, counting down; once stale, a red `prices 12 min old` | the same 10-minute threshold |
+| The bar | every card fades to 55% opacity | the snapshot is **30 minutes** old |
+| The config sidebar | `next refresh 7:12`, counting down; once stale, a red `prices 34 min old` | the same 30-minute threshold |
 | A config card | a red `!` in its top-right corner | the **last** refresh threw |
 
 The two triggers are deliberately different things. `snapshot.error` is precise
@@ -280,11 +285,11 @@ was made at all. The age of `updatedAt` catches both, because it measures what
 the reader actually cares about: how old this number is, not whether the last
 try raised.
 
-**Ten minutes**, an order of magnitude above the one-minute poll. A single
-missed minute is noise — a late alarm, a suspended worker, one unlucky request —
-and dimming the bar for it would train the eye to ignore the dimming. Ten
-minutes means roughly ten consecutive failures, which is a condition rather than
-a hiccup.
+**Thirty minutes — three polls deep, and it has to be expressed that way.** A
+threshold at or below the 10-minute period would dim the bar through most of
+every cycle, since a snapshot is almost a full period old just before the next
+one arrives. One missed poll is noise: a late alarm, a suspended worker, one
+unlucky request. Three consecutive misses is a condition.
 
 **Both surfaces run their own clock**, because staleness arrives with the
 passage of time rather than with a new snapshot — and when refreshes keep
@@ -308,7 +313,7 @@ settings rather than constants:
 
 | Setting | Today | Planned |
 |---|---|---|
-| Quote poll interval | 1 min, hard-coded | user-chosen, 1 min and up (Chrome clamps anything lower) |
+| Quote poll interval | 10 min, hard-coded | user-chosen, 1 min and up (Chrome clamps anything lower) |
 | History gap check | every 60 min, hard-coded | user-chosen interval |
 | Consumer idle timeout | 5 min, hard-coded | user-chosen, or off |
 
@@ -523,12 +528,12 @@ and how often that feed changes:
 
 | Where | Redrawn when | In practice |
 |---|---|---|
-| Ticker bar card | the snapshot's rows change | up to once a minute, but the *line* moves at most once a trading day |
-| Config page card | any snapshot arrives | the grid re-renders wholesale, so up to once a minute |
+| Ticker bar card | the snapshot's rows change | up to once every 10 min, but the *line* moves at most once a trading day |
+| Config page card | any snapshot arrives | the grid re-renders wholesale, so up to once every 10 min |
 | Detail dialog | the dialog opens | once, from its own fetch; the crosshair then redraws on mouse move from the series already in hand |
 
-The important line there is the middle one. **The per-minute poll cannot change
-a sparkline** — it fetches `range=1d` and reads a price out of the meta block,
+The important line there is the middle one. **The quote poll cannot change a
+sparkline** — it fetches `range=1d` and reads a price out of the meta block,
 never a close series. Only the hourly gap check adds a bar, and it adds one only
 when a trading day has ended. So the bar's chart is redrawn far more often than
 it changes.
@@ -548,6 +553,57 @@ series would call every watchlist stale all weekend, when nothing is wrong.
 published snapshot stores, so the largest thing routinely drawn and the most
 that is kept are one constant rather than two that can drift. The detail dialog
 exceeds it only because it fetches its own full-resolution year on demand.
+
+## 4 · Data flow — one series, from a request to a drawn pixel
+
+The three threads above each describe one aspect. This is the same story told
+once, in order.
+
+```
+  TRIGGER                      STORED                  PUBLISHED              DRAWN
+
+  Adding a ticker ──┐
+  spark?range=1y    │
+                    ├────▶  history:<SYMBOL>  ──┐
+  History gap check ┘       260 dated closes    │
+  spark?range=5d…1y         permanent           │
+                                                ├──▶ cache:snapshot ──┬──▶ config card
+  Quote poll ───────────────────────────────────┘    70 closes + price│    70 points
+  spark?range=1d            (price only,             disposable       └──▶ bar card
+                             nothing stored)                               28 points
+
+  Opening details ─────────────────────────────────────────────────────▶ detail dialog
+  spark?range=1y            (nothing stored, ever)                          ~251 points
+```
+
+| Hop | Points | Who does it | Lossy? |
+|---|---|---|---|
+| Yahoo → `history:<SYMBOL>` | a year's closes, kept to the newest **260** | `RefreshScheduler.syncHistory`, upserting by date | only at the far end, dropping bars older than 260 |
+| `history:<SYMBOL>` → `cache:snapshot` | **260 → 70** | `TickerService.buildRow`, at publish time | **yes, and one-way** |
+| `cache:snapshot` → config card | **70 → 70** | `TickerCard`, drawn as published | no |
+| `cache:snapshot` → bar card | **70 → 28** | `sparklinePath`, at draw time | yes |
+| Yahoo → detail dialog | **~251 → ~251** | its own fetch, nothing stored | no |
+
+**The two cards are siblings, not a chain.** Both read the same 70-point payload
+out of the snapshot; the bar's 28 is downsampled from that payload at draw time,
+not from anything the config page produced. Neither card can affect the other,
+and closing one changes nothing about the other's resolution.
+
+**Only the middle hop is a decision.** The first is what the upstream returns,
+the last two are what a given box can legibly draw. 260 → 70 is the one place a
+number was chosen to bound storage, and it is chosen once: `SNAPSHOT_SERIES_POINTS`
+is simultaneously the largest thing routinely drawn and the most that is
+published, so the two cannot drift apart.
+
+**The price travels a different road from the line.** The quote poll writes into
+`cache:snapshot` without ever touching `history:<SYMBOL>` — it fetches
+`range=1d` and reads a single number out of the meta block. That is why a price
+can be minutes old while the line beside it is exactly as current as it will
+ever be, and why staleness is measured on the quote timestamp alone.
+
+**The dialog is off the chain entirely.** It fetches its own year on open, draws
+every session of it, and discards the lot on close. Nothing it downloads is
+stored, and nothing stored is consulted to draw it.
 
 # Design notes
 

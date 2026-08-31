@@ -1,4 +1,4 @@
-import { QUOTE_PERIOD_MS } from '../shared/freshness';
+import { SURFACE_HEARTBEAT_MS } from '../shared/freshness';
 import { STORAGE_KEYS, sendMessage } from '../shared/messages';
 import type { SymbolMatch, TickerRow, TickerSnapshot } from '../shared/types';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -88,7 +88,7 @@ export class ConfigApp {
     // The worker only polls while some surface is asking for rows, and asking
     // is what marks this page as one. Without this the countdown would tick
     // down to a refresh that had already stopped running.
-    setInterval(() => void this.pull(), QUOTE_PERIOD_MS);
+    setInterval(() => void this.pull(), SURFACE_HEARTBEAT_MS);
   }
 
   /** Fetches the current snapshot and, in doing so, keeps the poll alive. */

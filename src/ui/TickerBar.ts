@@ -14,7 +14,7 @@ export class TickerBar {
    * when a refresh fails repeatedly the worker stops writing at all, so nothing
    * would wake the bar. Hence a clock of its own.
    */
-  private static readonly FRESHNESS_TICK_MS = 15_000;
+  private static readonly FRESHNESS_TICK_MS = 30_000;
 
   private readonly bar: HTMLElement;
   private readonly viewport: HTMLElement;

@@ -1,21 +1,32 @@
 /**
  * How old a price is allowed to get before the UI stops presenting it as live.
  *
- * The poll runs every minute, so a snapshot older than that means an attempt
- * failed, was throttled upstream, or never ran at all — but a single missed
- * minute is noise, not news. Ten minutes is deliberately an order of magnitude
- * above the poll: long enough that a transient hiccup self-heals without the
- * bar flickering, short enough that a genuinely stuck price is called out while
- * it still matters.
+ * Three polls deep, and it has to be expressed that way rather than as a flat
+ * number: a threshold at or below the poll period would leave the bar dimmed
+ * for most of every cycle, since a snapshot is by definition almost a full
+ * period old just before the next one lands. Three missed polls is a condition;
+ * one is a late alarm.
  */
-export const STALE_AFTER_MS = 10 * 60 * 1000;
+export const STALE_AFTER_MS = 3 * 10 * 60 * 1000;
 
 /**
  * The quote poll's period, shared rather than duplicated, so the scheduler that
  * sets the alarm and the clock that counts down to it cannot drift apart.
- * Chrome clamps alarm periods to one minute; this is that floor.
+ * Chrome clamps alarm periods to a one-minute floor; this sits well above it,
+ * because Yahoo's own quotes are ~15 min delayed and polling far inside that
+ * window buys freshness the upstream does not actually have.
  */
-export const QUOTE_PERIOD_MS = 60 * 1000;
+export const QUOTE_PERIOD_MS = 10 * 60 * 1000;
+
+/**
+ * How often a mounted surface re-announces itself to the worker.
+ *
+ * Deliberately *not* the poll period. The worker polls only while some surface
+ * has spoken up recently, so the announcement has to be several times finer
+ * than the window it keeps open — announcing once per poll period would race
+ * that window and drop polls whenever the two clocks drifted apart.
+ */
+export const SURFACE_HEARTBEAT_MS = 60 * 1000;
 
 /** A snapshot that has never been written is not stale — it is simply absent. */
 export function isStale(updatedAt: number, now: number = Date.now()): boolean {
