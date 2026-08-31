@@ -24,6 +24,8 @@ export class FreshnessClock {
 
   private readonly countdown: HTMLElement;
   private readonly stamp: HTMLElement;
+  private readonly stampLabel: HTMLElement;
+  private readonly stampValue: HTMLElement;
   private state: FreshnessState = { updatedAt: 0, attemptedAt: 0, error: null, hasRows: false };
 
   constructor(private readonly host: HTMLElement) {
@@ -32,6 +34,11 @@ export class FreshnessClock {
 
     this.stamp = document.createElement('p');
     this.stamp.className = 'freshness-stamp';
+    this.stampLabel = document.createElement('span');
+    this.stampLabel.className = 'freshness-stamp-label';
+    this.stampValue = document.createElement('span');
+    this.stampValue.className = 'freshness-stamp-value';
+    this.stamp.append(this.stampLabel, this.stampValue);
 
     this.host.append(this.countdown, this.stamp);
     setInterval(() => this.paint(), FreshnessClock.TICK_MS);
@@ -55,7 +62,8 @@ export class FreshnessClock {
     // counting towards a refresh that will never happen.
     if (!hasRows) {
       this.countdown.textContent = '';
-      this.stamp.textContent = '';
+      this.stampLabel.textContent = '';
+      this.stampValue.textContent = '';
       return;
     }
 
@@ -63,19 +71,21 @@ export class FreshnessClock {
     const stale = isStale(updatedAt, now);
     const bad = stale || error !== null;
 
-    this.countdown.textContent = `next refresh ${formatCountdown(msUntilNextRefresh(attemptedAt, now))}`;
+    // A zero here is not "about to happen" — it is "the last attempt is more
+    // than a period behind", which is worth saying in words. A frozen 0:00 reads
+    // as a broken clock.
+    const remaining = msUntilNextRefresh(attemptedAt, now);
+    this.countdown.textContent =
+      remaining > 0 ? `next refresh ${formatCountdown(remaining)}` : 'refresh due';
     this.countdown.className = bad ? 'freshness-countdown is-bad' : 'freshness-countdown';
     this.countdown.title = error
       ? `The last poll failed: ${error}`
       : 'Counting down to the next automatic price refresh.';
 
-    if (updatedAt <= 0) {
-      this.stamp.textContent = 'last update — never';
-      this.stamp.className = 'freshness-stamp is-bad';
-      return;
-    }
-    this.stamp.textContent = `last update ${formatIsoLocal(updatedAt)}`;
-    this.stamp.className = bad ? 'freshness-stamp is-bad' : 'freshness-stamp';
+    this.stampLabel.textContent = 'last update';
+    this.stampValue.textContent = updatedAt > 0 ? formatIsoLocal(updatedAt) : 'never';
+    this.stamp.className = bad || updatedAt <= 0 ? 'freshness-stamp is-bad' : 'freshness-stamp';
+    if (updatedAt <= 0) return;
     this.stamp.title = stale
       ? `No successful refresh for ${formatAge(now - updatedAt)} — these are the last known prices.`
       : 'When prices last arrived.';

@@ -36,11 +36,20 @@ export class RefreshScheduler {
     private readonly watchlist: WatchlistRepository
   ) {}
 
+  /**
+   * `delayInMinutes` is the point of this. Without it Chrome schedules the first
+   * firing a whole period out, so a browser that has just started — or an
+   * extension that has just been reloaded — sits for ten minutes with a
+   * countdown at zero and no poll behind it. Chrome clamps sub-30-second delays,
+   * so half a minute is the shortest honest value.
+   */
   async install(): Promise<void> {
     await chrome.alarms.create(QUOTE_ALARM, {
+      delayInMinutes: 0.5,
       periodInMinutes: RefreshScheduler.QUOTE_PERIOD_MINUTES
     });
     await chrome.alarms.create(HISTORY_ALARM, {
+      delayInMinutes: 1,
       periodInMinutes: RefreshScheduler.HISTORY_PERIOD_MINUTES
     });
   }

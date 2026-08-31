@@ -33,7 +33,7 @@ It cannot appear on `chrome://` pages, the Web Store, or the PDF viewer — exte
 
 **Click the bar** — anywhere on it — and the config page opens in a new tab. The toolbar icon opens the same page.
 
-The sidebar carries a **countdown to the next quote poll** and, under it, the ISO timestamp of the last poll that actually returned prices — `last update 2026-08-31T17:52:06-04:00`. Both turn red together, and they mean one thing: what you are reading did not come from the last attempt. The countdown reddens as soon as an attempt fails; the timestamp is also red once nothing has succeeded for thirty minutes.
+The sidebar carries a **countdown to the next quote poll** and, under it, the ISO timestamp of the last poll that actually returned prices — `2026-08-31T17:52:06-04:00`. A countdown that has run out reads `refresh due` rather than a frozen `0:00`, since a zero there means the last attempt is more than a period behind rather than that one is imminent. Both turn red together, and they mean one thing: what you are reading did not come from the last attempt. The countdown reddens as soon as an attempt fails; the timestamp is also red once nothing has succeeded for thirty minutes.
 
 Under them is **Refresh**, which runs a gap check and a quote poll immediately — the same two code paths a scheduled tick uses — and the countdown and timestamp move with its reply.
 
