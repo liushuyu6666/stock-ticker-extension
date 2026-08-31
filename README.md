@@ -280,6 +280,23 @@ being kept, merged or reclaimed.
 | `cache:snapshot` | local | one render payload, 70 closes per row | **Disposable.** Delete it and the next poll rebuilds it from history plus one quote fetch |
 | `meta:lastConsumerSeenAt` | local | when a bar was last on screen | **Disposable.** Worst case, one skipped poll |
 
+**`sync` versus `local`.** Two areas with different jobs, and the split is the
+single most load-bearing decision in this section:
+
+| | `chrome.storage.sync` | `chrome.storage.local` |
+|---|---|---|
+| Travels between your machines | **Yes**, via your Chrome profile | **No**, one device only |
+| Size | 100 KB total, 8 KB per item | 10 MB |
+| Write rate | capped (~1,800/hour, 120/min) | uncapped |
+| Holds here | the watchlist — what you authored | history and caches — what was fetched |
+
+The rule of thumb: **`sync` is for intent, `local` is for data.** Which tickers
+you follow and what you consider a fair price are decisions worth carrying to
+another machine; a year of Microsoft closes is not, since any machine can refetch
+it in one request. That split is also why label writes are skipped unless
+something changed — a per-minute poll writing unconditionally would sit at
+`sync`'s rate ceiling all day.
+
 **What the sparklines are drawn from:** the bar and the config card both read
 `cache:snapshot` — never the history keys directly, and never the network. The
 detail dialog is the exception: it fetches its own full-resolution year and
@@ -291,25 +308,35 @@ accumulates for a ticker you no longer hold.
 
 #### Why orphans still happen
 
-A series with no ticker to belong to is an **orphan**, and `prune` exists to
-reclaim them. Removal really does delete the series — but only *on the device
-where you removed it*, which leaves three ways one can survive:
+A series with no ticker to belong to is an **orphan**. On the device where you
+press Remove, there is never one: `REMOVE_SYMBOL` deletes the watchlist entry
+and the series together. Orphans arise on the *other* device, and on any device
+where that pair of deletes did not complete.
 
-1. **A second device.** The watchlist lives in `storage.sync` and travels
-   between your machines; history lives in `storage.local` and does not. Remove
-   AAPL on your laptop and your desktop receives the shorter watchlist, but its
-   `history:AAPL` sits in local storage with nothing to trigger a delete. This
-   is not a race — it is the guaranteed outcome of syncing one half of a pair,
-   and it is the reason `prune` is worth having at all.
-2. **The two deletes are not atomic.** `REMOVE_SYMBOL` drops the watchlist
-   entry and then the series, as two awaits. Chrome suspends MV3 workers
-   aggressively, so a suspension between them leaves the series behind.
+**Absence is the signal — no tombstone list is needed.** `prune` is handed the
+current watchlist and deletes every stored series not in it. Because the
+watchlist is *complete* and syncs across machines, a symbol missing from it can
+only mean it was removed. There is nothing a "deleted symbols" list could say
+that its absence from the watchlist does not already say, so the extension keeps
+no such list — one less thing to keep consistent across two devices with no
+transactions between them.
+
+Three situations reach `prune`, and it handles all of them the same way:
+
+1. **A removal on another machine.** The shorter watchlist syncs down; the local
+   `history:` key does not know about it until the next sweep.
+2. **The two deletes are not atomic.** `REMOVE_SYMBOL` drops the watchlist entry
+   and then the series, as two awaits. Chrome suspends MV3 workers aggressively,
+   so a suspension between them leaves the series behind.
 3. **Older installs.** Before the config page existed there was no way to remove
    a ticker and no `history.remove()` to call, so anything stored by those
    versions has never been cleaned up.
 
-`prune` runs on every history sync — hourly rather than only after a backfill —
-so in each case the series is reclaimed on the next pass rather than lingering.
+`prune` runs on **every** history sync — hourly, before the staleness check, and
+before the early return for an empty watchlist. That last point matters more
+than it looks: emptying the watchlist entirely is the moment when *every* stored
+series becomes an orphan at once, and returning early there used to strand all
+of them permanently.
 
 ### Size
 

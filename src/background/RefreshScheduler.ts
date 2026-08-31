@@ -51,12 +51,13 @@ export class RefreshScheduler {
   /** Called on install, on wake, and whenever the watchlist changes. */
   async syncHistory(): Promise<void> {
     const symbols = await this.watchlist.symbols();
-    if (symbols.length === 0) return;
 
-    // Runs first and unconditionally: a series orphaned by a removal that raced
-    // the worker's suspension would otherwise sit there until the next backfill
-    // happened to need one, which could be never.
+    // Pruning runs first, and crucially *before* the empty check. A watchlist
+    // with nothing in it is not a reason to skip the sweep — it is the case
+    // where every stored series has become an orphan at once. Returning early
+    // here used to strand all of them permanently.
     await this.history.prune(symbols);
+    if (symbols.length === 0) return;
 
     const target = lastTradingDay();
     // Group the stale symbols by the window each one needs, so a routine daily
