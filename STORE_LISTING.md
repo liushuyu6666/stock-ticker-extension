@@ -62,9 +62,12 @@ search terms are sent to Yahoo Finance solely to retrieve prices.
 
 ## Assets still needed
 
-- [ ] At least one screenshot, **1280×800** or **640×400** (PNG or JPEG). The
-      config page with a populated watchlist, and the strip in place on a real
-      page, both read well.
+- [x] Screenshots — five, ready in `screenshots/`, each **1280×800** 24-bit PNG
+      with no alpha channel, which is what the Store accepts. Upload them in
+      filename order: the strip in place on a real page, the watchlist, the
+      search dropdown, the all-matches page, the ticker detail dialog. They are
+      the raw captures scaled to fit and centred on the extension's own
+      porcelain ground — nothing is cropped away except the browser scrollbar.
 - [ ] Optional small promo tile, 440×280.
 
 ## Release checklist
