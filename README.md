@@ -285,10 +285,10 @@ names — `["AAPL", "MSFT", "NVDA"]` — and nothing more: no dates, no closes, 
 part of the series themselves. Its whole job is to answer one question, *which
 symbols currently have a series stored on this device?*
 
-**The second machine is why it exists.** Remove a ticker on one machine and the
-other's series is *not* deleted with it — only the watchlist syncs. That machine
-just sees a shorter watchlist, so `history:index` tells `prune` which symbols it
-still holds, and so which series to delete.
+**The second machine is why it exists.** Remove a ticker and its series is
+deleted on that machine, but not simultaneously on your others — only the
+watchlist syncs. Each of those compares the shorter watchlist against its own
+`history:index`, and `prune` deletes the series of any symbol left over.
 
 Losing the list is unrecoverable: `prune` then finds nothing stale, and every
 existing orphan is invisible for good. Now that a year of closes encodes to
