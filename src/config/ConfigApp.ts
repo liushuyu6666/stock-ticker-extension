@@ -39,6 +39,7 @@ export class ConfigApp {
   /** Null while the grid is showing; the query string while results are. */
   private resultsQuery: string | null = null;
   private statusTimer: number | undefined;
+  private heartbeat: number | undefined;
   /** Whether the snapshot on screen came from a refresh that failed. */
   private refreshFailed = false;
 
@@ -100,7 +101,7 @@ export class ConfigApp {
     // The worker only polls while some surface is asking for rows, and asking
     // is what marks this page as one. Without this the countdown would tick
     // down to a refresh that had already stopped running.
-    setInterval(() => void this.pull(), SURFACE_HEARTBEAT_MS);
+    this.heartbeat = window.setInterval(() => void this.pull(), SURFACE_HEARTBEAT_MS);
   }
 
   /**
@@ -132,7 +133,17 @@ export class ConfigApp {
       const response = await sendMessage({ type: 'GET_SNAPSHOT' });
       if ('snapshot' in response && response.ok) this.apply(response.snapshot);
     } catch {
-      // The worker was asleep or restarting; the next tick retries.
+      // Reloading an extension orphans the pages it had already opened: this
+      // document keeps rendering, but its `chrome.runtime` is gone and every
+      // message rejects. Nothing here can recover it, and staying silent leaves
+      // a page that looks live while its countdown quietly runs out — so say so
+      // and stop pretending to poll.
+      if (!chrome.runtime?.id) {
+        window.clearInterval(this.heartbeat);
+        this.setStatus('The extension was reloaded — reload this page to reconnect.', true, true);
+        return;
+      }
+      // Otherwise the worker was merely asleep or restarting; the next tick retries.
     }
   }
 
@@ -238,10 +249,11 @@ export class ConfigApp {
     this.setStatus(`${symbol} target set to ${targetPrice.toFixed(2)}.`, false);
   }
 
-  private setStatus(message: string, isError: boolean): void {
+  private setStatus(message: string, isError: boolean, sticky = false): void {
     this.status.textContent = message;
     this.status.className = isError ? 'status is-error' : 'status is-ok';
     window.clearTimeout(this.statusTimer);
+    if (sticky) return;
     this.statusTimer = window.setTimeout(() => {
       this.status.textContent = '';
       this.status.className = 'status';
