@@ -322,7 +322,7 @@ A year is ~251 daily closes, but almost nowhere should draw all of them. Each si
 |---|---|---|---|---|
 | Ticker bar card | 46 × 14 | **28** | `MAX_POINTS` (default) | the snapshot's 70, at draw time |
 | Config page card | 260 × 48 | **70** | `SNAPSHOT_SERIES_POINTS` | history's 260, in `TickerService` |
-| Detail dialog | 435 × 108 | **400 — i.e. every session** | `DETAIL_SERIES_POINTS` | its own live fetch — nothing stored |
+| Detail dialog | fluid — 62vw × 38vh | **400 — i.e. every session** | `DETAIL_SERIES_POINTS` | its own live fetch — nothing stored |
 
 Read down that last column and the chain from the top of this section reappears: **260 stored → 70 published → 28 drawn.** Each step is a downsample of the one above it, and each is lossy and one-way, which is why the durable copy has to be the unsampled one — you cannot append tomorrow's close to an already-sampled series and re-derive an honest 70.
 
@@ -332,9 +332,9 @@ Each number was chosen the same way — render a year of real closes across five
 
 - At **46px** the choice is stark. 64 and 40 points are noise; 14 collapses the year's actual shape. 28 is the only comfortable answer.
 - At **260px** it is subtler. 158 is scratchy and 34 over-smooths, with 70 the balance.
-- At **435 × 108** it barely matters — even the full 251 points read cleanly, because the height carries them. So the dialog does not downsample at all: its budget of 400 sits above a trading year's ~252 sessions, and the cap exists only to guard against a pathologically long series.
+- At the dialog's size it barely matters — even the full 251 points read cleanly, because the height carries them. So the dialog does not downsample at all: its budget of 400 sits above a trading year's ~252 sessions, and the cap exists only to guard against a pathologically long series.
 
-Drawing every session there is not just cosmetic. It is what lets the **hover crosshair** land on a real trading day: a point index *is* a session index, so the date under the cursor needs no separate lookup and no interpolation between sampled points. At 436px that works out to ~1.7px per session.
+Drawing every session there is not just cosmetic. It is what lets the **hover crosshair** land on a real trading day: a point index *is* a session index, so the date under the cursor needs no separate lookup and no interpolation between sampled points. On a 1600px window that is ~4px per session, and the chart scales with the window rather than sitting at a fixed 435 × 108 and wasting the room.
 
 ### How often each one is redrawn
 

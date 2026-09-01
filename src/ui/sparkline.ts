@@ -122,6 +122,9 @@ export function createSparkline(
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', sparklinePath(closes, size.width, size.height, size.points ?? MAX_POINTS));
   path.setAttribute('fill', 'none');
+  // The svg stretches to its box, so without this the stroke stretches too and
+  // horizontal runs come out fatter than vertical ones.
+  path.setAttribute('vector-effect', 'non-scaling-stroke');
   path.setAttribute('stroke', TREND_COLORS[trend]);
   path.setAttribute('stroke-width', '1');
   path.setAttribute('stroke-linecap', 'round');
