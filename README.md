@@ -33,7 +33,16 @@ It cannot appear on `chrome://` pages, the Web Store, or the PDF viewer — exte
 
 **Click the bar** — anywhere on it — and the config page opens in a new tab. The toolbar icon opens the same page.
 
-The sidebar carries a **countdown to the next quote poll** and, under it, the ISO timestamp of the last poll that actually returned prices — `2026-08-31T17:52:06-04:00`. A countdown that has run out reads `refresh due` rather than a frozen `0:00`, since a zero there means the last attempt is more than a period behind rather than that one is imminent. Both turn red together, and they mean one thing: what you are reading did not come from the last attempt. The countdown reddens as soon as an attempt fails; the timestamp is also red once nothing has succeeded for thirty minutes.
+The sidebar carries a **countdown to the next quote poll** and, under it, the ISO timestamp of the last poll that actually returned prices — `2026-08-31T17:52:06-04:00`. The two redden on different rules, because they answer different questions.
+
+| | Red when |
+|---|---|
+| **next refresh** | the last poll failed, or none has run for longer than a period — the *schedule* is not keeping up |
+| **last update** | no poll has succeeded for thirty minutes — the *prices* are old, the same test that dims the bar |
+
+So one failed poll reddens the countdown alone: the timestamp it sits above is still perfectly good. Only a sustained outage reddens both.
+
+The countdown always counts. A zero means a poll is due, and a due poll is something to run rather than something to announce, so the page asks for one and the reply resets the clock — once per overdue stretch, since `attemptedAt` advances even when the attempt fails.
 
 Under them is **Refresh**, which runs a gap check and a quote poll immediately — the same two code paths a scheduled tick uses — and the countdown and timestamp move with its reply.
 

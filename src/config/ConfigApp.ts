@@ -48,7 +48,9 @@ export class ConfigApp {
     this.body = document.getElementById('main-body') as HTMLElement;
     this.confirm = new ConfirmDialog(document.body);
     this.detail = new TickerDetailDialog(document.body);
-    this.clock = new FreshnessClock(document.getElementById('freshness') as HTMLElement);
+    this.clock = new FreshnessClock(document.getElementById('freshness') as HTMLElement, () =>
+      void this.refreshNow()
+    );
     this.refreshButton = document.getElementById('refresh') as HTMLButtonElement;
     this.refreshButton.addEventListener('click', () => void this.refreshNow());
 

@@ -29,7 +29,14 @@ export class FreshnessClock {
   private readonly stampValue: HTMLElement;
   private state: FreshnessState = { updatedAt: 0, attemptedAt: 0, error: null, hasRows: false };
 
-  constructor(private readonly host: HTMLElement) {
+  /** Set while a refresh triggered by the countdown reaching zero is pending. */
+  private dueFired = false;
+
+  constructor(
+    private readonly host: HTMLElement,
+    /** Called when the countdown runs out, so a due poll happens rather than being announced. */
+    private readonly onDue: () => void
+  ) {
     this.label = document.createElement('span');
     this.label.className = 'freshness-label';
     this.value = document.createElement('span');
@@ -73,27 +80,34 @@ export class FreshnessClock {
 
     const now = Date.now();
     const stale = isStale(updatedAt, now);
-    const bad = stale || error !== null;
     const remaining = msUntilNextRefresh(attemptedAt, now);
 
-    // A run-out countdown is not "imminent" — it is "the last attempt is more
-    // than a period behind", so the state moves into the label and the value
-    // stops pretending to be a number.
-    if (remaining > 0) {
-      this.label.textContent = 'next refresh';
-      this.value.textContent = formatCountdown(remaining);
-    } else {
-      this.label.textContent = 'refresh due';
-      this.value.textContent = '—';
+    // The countdown always counts. A zero means a poll is due, and a due poll is
+    // something to run, not something to announce — so ask for one and let the
+    // reply reset the clock. Fired once per overdue stretch: `attemptedAt`
+    // advances even when the attempt fails, so the next paint has a fresh
+    // number and re-arms this.
+    this.label.textContent = 'next refresh';
+    this.value.textContent = formatCountdown(remaining);
+    if (remaining === 0 && !this.dueFired) {
+      this.dueFired = true;
+      this.onDue();
+    } else if (remaining > 0) {
+      this.dueFired = false;
     }
 
-    this.row.className = bad || remaining === 0 ? 'freshness-row is-bad' : 'freshness-row';
+    // Red on the top line means the schedule is not keeping up: the last attempt
+    // failed, or none has run for longer than a period.
+    this.row.className = error !== null || remaining === 0 ? 'freshness-row is-bad' : 'freshness-row';
     this.row.title = error
       ? `The last poll failed: ${error}`
       : 'Counting down to the next automatic price refresh.';
 
     this.stampValue.textContent = updatedAt > 0 ? formatIsoLocal(updatedAt) : 'never';
-    this.stamp.className = bad || updatedAt <= 0 ? 'freshness-stamp is-bad' : 'freshness-stamp';
+    // Red on the bottom line means the prices themselves are old — the same
+    // 30-minute test that dims the bar. A single failed poll does not qualify:
+    // the timestamp it names is still perfectly good.
+    this.stamp.className = stale || updatedAt <= 0 ? 'freshness-stamp is-bad' : 'freshness-stamp';
     this.stamp.title = stale
       ? `No successful refresh for ${formatAge(now - updatedAt)} — these are the last known prices.`
       : 'When prices last arrived.';
