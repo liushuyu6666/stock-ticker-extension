@@ -1,3 +1,4 @@
+import { QUOTE_PERIOD_MS } from '../shared/freshness';
 import type { Request, Response } from '../shared/messages';
 import type { HistoryStore } from './HistoryStore';
 import type { QuoteProvider } from './QuoteProvider';
@@ -52,6 +53,15 @@ export class MessageRouter {
         // A cold worker has nothing cached; fetch once so the bar is never blank.
         if (snapshot.rows.length === 0) {
           await this.scheduler.syncHistory();
+          return { ok: true, snapshot: await this.ticker.refreshQuotes() };
+        }
+        // The poll only runs while a surface is on screen, so a payload can be
+        // arbitrarily overdue by the time one appears — the alarm fired into an
+        // empty room and did nothing. Asking is itself the signal that someone
+        // is watching again, so repair it here rather than leaving a countdown
+        // that has already run out. One poll at most: a failed attempt still
+        // advances `attemptedAt`, so the next caller sees a current payload.
+        if (Date.now() - snapshot.attemptedAt >= QUOTE_PERIOD_MS) {
           return { ok: true, snapshot: await this.ticker.refreshQuotes() };
         }
         return { ok: true, snapshot };

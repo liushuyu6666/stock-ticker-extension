@@ -33,7 +33,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function bootstrap(): Promise<void> {
   await scheduler.install();
-  await scheduler.syncHistory();
+  // Separately caught: a throttled or failing history fetch used to abort the
+  // whole chain, so the browser started with no prices and a countdown that had
+  // nothing behind it until the first alarm.
+  await scheduler.syncHistory().catch((error: unknown) => {
+    console.warn('[stock-ticker][background][bootstrap] history sync failed', {
+      message: error instanceof Error ? error.message : String(error)
+    });
+  });
   await ticker.refreshQuotes();
 }
 
