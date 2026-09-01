@@ -1,15 +1,4 @@
 /**
- * How old a price is allowed to get before the UI stops presenting it as live.
- *
- * Three polls deep, and it has to be expressed that way rather than as a flat
- * number: a threshold at or below the poll period would leave the bar dimmed
- * for most of every cycle, since a snapshot is by definition almost a full
- * period old just before the next one lands. Three missed polls is a condition;
- * one is a late alarm.
- */
-export const STALE_AFTER_MS = 3 * 10 * 60 * 1000;
-
-/**
  * The quote poll's period, shared rather than duplicated, so the scheduler that
  * sets the alarm and the clock that counts down to it cannot drift apart.
  * Chrome clamps alarm periods to a one-minute floor; this sits well above it,
@@ -17,6 +6,17 @@ export const STALE_AFTER_MS = 3 * 10 * 60 * 1000;
  * window buys freshness the upstream does not actually have.
  */
 export const QUOTE_PERIOD_MS = 10 * 60 * 1000;
+
+/**
+ * How old a price is allowed to get before the UI stops presenting it as live.
+ *
+ * Three polls deep, and written as a multiple rather than as a flat number so
+ * it stays that way: a threshold at or below the poll period would leave the
+ * bar dimmed for most of every cycle, since a payload is almost a full period
+ * old just before the next one lands. Three missed polls is a condition; one is
+ * a late alarm.
+ */
+export const STALE_AFTER_MS = 3 * QUOTE_PERIOD_MS;
 
 /**
  * How often a mounted surface re-announces itself to the worker.
