@@ -62,7 +62,7 @@ A query that wide spans a lot of venues: "microsoft" alone returns **19 differen
 
 **Clicking anything — a dropdown row, a results row, or a card already on the bar — opens a detail dialog**: current price with the day's change, a large one-year sparkline, the day's and 52-week ranges, and the target field. For a symbol you do not yet track it offers *Add ticker*; for one you do, *Save target* and *Remove*. The sparkline retints live as you type a target across the current price, so you can see which side of your line the year sits on before committing.
 
-**Hovering that sparkline** draws a crosshair — a vertical rule, a dot on the line and a label giving that day's date and close. It reads from the series the dialog already holds, so tracking the cursor issues no request of any kind.
+**Hovering that sparkline** draws a crosshair — a vertical rule, a dot on the line and a label giving that day's date and close. It reads from the series the dialog already holds, so tracking the cursor issues no request of any kind. **Your target price is drawn across it** as a dashed rule, on the same scale as the line, so the year is read against your own number rather than against the axis alone. It moves as you type in the target field, and it is omitted when the target falls outside the year charted — a line pinned to the top or bottom edge would claim a price the chart cannot show.
 
 **Removing** asks for confirmation, then deletes the ticker *and its stored history*, reclaiming the space rather than orphaning a series no one reads.
 

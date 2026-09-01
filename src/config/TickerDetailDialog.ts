@@ -148,6 +148,12 @@ function paintSpark(holder: HTMLElement, preview: SymbolPreview, rawTarget: stri
   tipDate.className = 'spark-tip-date';
   const tipPrice = document.createElement('span');
   tipPrice.className = 'spark-tip-price';
+
+  const targetLine = document.createElement('div');
+  targetLine.className = 'spark-target';
+  const targetLabel = document.createElement('span');
+  targetLabel.className = 'spark-target-label';
+  targetLine.append(targetLabel);
   tip.append(tipDate, tipPrice);
 
   const hide = (): void => {
@@ -159,15 +165,40 @@ function paintSpark(holder: HTMLElement, preview: SymbolPreview, rawTarget: stri
   const geometry = sparklineGeometry(preview.closes, DETAIL_SPARKLINE.points, DETAIL_SPARKLINE.height);
   const lastIndex = geometry.points.length - 1;
 
-  const track = (event: PointerEvent): void => {
+  /**
+   * The overlays are positioned against the holder, but every fraction is a
+   * fraction *of the svg* — and the svg sits inside the holder's padding.
+   * Measuring the gap rather than assuming it keeps the dot on the line if the
+   * padding ever changes.
+   */
+  const offsets = (): { box: DOMRect; dx: number; dy: number } => {
     const box = svg.getBoundingClientRect();
+    const outer = holder.getBoundingClientRect();
+    return { box, dx: box.left - outer.left, dy: box.top - outer.top };
+  };
+
+  const placeTarget = (): void => {
+    const target = Number(rawTarget);
+    const { box, dy } = offsets();
+    // Drawn only when it falls inside the year actually charted: a line pinned
+    // to the top or bottom edge would claim a price the chart cannot show.
+    const inRange =
+      Number.isFinite(target) && target > 0 && target >= geometry.min && target <= geometry.max;
+    targetLine.hidden = !inRange || box.height === 0;
+    if (targetLine.hidden) return;
+    targetLine.style.top = `${dy + geometry.valueFraction(target) * box.height}px`;
+    targetLabel.textContent = `target ${target.toFixed(2)}`;
+  };
+
+  const track = (event: PointerEvent): void => {
+    const { box, dx, dy } = offsets();
     if (box.width === 0) return;
 
     const ratio = clamp((event.clientX - box.left) / box.width, 0, 1);
     const index = Math.round(ratio * lastIndex);
 
-    const x = geometry.xFraction(index) * box.width;
-    const y = geometry.yFraction(index) * box.height;
+    const x = dx + geometry.xFraction(index) * box.width;
+    const y = dy + geometry.yFraction(index) * box.height;
 
     cursor.style.left = `${x}px`;
     dot.style.left = `${x}px`;
@@ -178,16 +209,22 @@ function paintSpark(holder: HTMLElement, preview: SymbolPreview, rawTarget: stri
 
     // Clamp so the label never hangs off either edge of the chart.
     const half = tip.getBoundingClientRect().width / 2;
-    tip.style.left = `${clamp(x, half, box.width - half)}px`;
+    tip.style.left = `${clamp(x, dx + half, dx + box.width - half)}px`;
     tip.style.top = `${y}px`;
 
     holder.classList.add('is-tracking');
   };
 
-  holder.replaceChildren(svg, cursor, dot, tip);
+  holder.replaceChildren(svg, targetLine, cursor, dot, tip);
   holder.onpointermove = track;
   holder.onpointerleave = hide;
   holder.onpointercancel = hide;
+
+  // Layout has not happened yet on the frame the dialog opens, so every box
+  // would measure zero; and the chart is sized in vh, so a resized window has
+  // to re-place the line.
+  requestAnimationFrame(placeTarget);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(placeTarget).observe(holder);
 }
 
 function clamp(value: number, low: number, high: number): number {

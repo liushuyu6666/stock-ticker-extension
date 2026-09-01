@@ -35,6 +35,16 @@ export interface SparklineGeometry {
   xFraction(index: number): number;
   /** 0 at the top edge, 1 at the bottom. */
   yFraction(index: number): number;
+  /**
+   * The same mapping for an arbitrary price rather than a drawn point, so a
+   * reference line can be placed against the identical scale. Outside the
+   * drawn range it returns a fraction beyond 0..1 — the caller decides whether
+   * that is worth drawing.
+   */
+  valueFraction(value: number): number;
+  /** The lowest and highest close actually drawn. */
+  min: number;
+  max: number;
 }
 
 export function sparklineGeometry(
@@ -55,15 +65,19 @@ export function sparklineGeometry(
   // A flat year would divide by zero; draw it down the middle instead.
   const span = max - min;
 
+  const valueFraction = (value: number): number => {
+    if (points.length === 0 || span === 0) return 0.5;
+    return (VERTICAL_PADDING + (1 - (value - min) / span) * usable) / height;
+  };
+
   return {
     points,
+    min,
+    max,
     // A single point has no span to sit along, so it centres.
     xFraction: (index) => (points.length < 2 ? 0.5 : index / (points.length - 1)),
-    yFraction: (index) => {
-      if (points.length === 0 || span === 0) return 0.5;
-      const y = VERTICAL_PADDING + (1 - (points[index] - min) / span) * usable;
-      return y / height;
-    }
+    yFraction: (index) => (points.length === 0 ? 0.5 : valueFraction(points[index])),
+    valueFraction
   };
 }
 
