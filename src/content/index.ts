@@ -1,3 +1,5 @@
+import { STORAGE_KEYS } from '../shared/messages';
+import { HIDDEN_SITE_DEFAULTS, isHiddenSite } from '../shared/sites';
 import { TICKER_CSS } from '../ui/styles';
 import { TickerBar } from '../ui/TickerBar';
 import { TickerClient } from '../ui/TickerClient';
@@ -58,8 +60,43 @@ function pushPageDown(): void {
   document.documentElement.style.setProperty('margin-top', `${BAR_HEIGHT_PX}px`, 'important');
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', mount, { once: true });
-} else {
-  mount();
+/**
+ * Read straight from storage rather than through the worker: this runs on every
+ * page load, and waking a suspended service worker to answer one question would
+ * put a message round trip in front of every navigation.
+ */
+async function hiddenHere(): Promise<boolean> {
+  try {
+    const stored = await chrome.storage.sync.get(STORAGE_KEYS.hiddenSites);
+    const sites = stored[STORAGE_KEYS.hiddenSites];
+    return isHiddenSite(location.hostname, Array.isArray(sites) ? sites : HIDDEN_SITE_DEFAULTS);
+  } catch {
+    // Storage unavailable (a torn-down extension context); showing the bar is
+    // the safer failure, since hiding it silently looks like a broken install.
+    return false;
+  }
 }
+
+/** Takes the strip back off the page, and the space it reserved with it. */
+function unmount(): void {
+  document.getElementById(HOST_ID)?.remove();
+  document.documentElement.style.removeProperty('margin-top');
+}
+
+async function start(): Promise<void> {
+  if (await hiddenHere()) return;
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount, { once: true });
+  } else {
+    mount();
+  }
+}
+
+// Adding the site you are looking at should hide the bar there and then, not on
+// the next reload — and removing it should bring the bar back the same way.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync' || !changes[STORAGE_KEYS.hiddenSites]) return;
+  void hiddenHere().then((hidden) => (hidden ? unmount() : mount()));
+});
+
+void start();

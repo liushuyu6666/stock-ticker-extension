@@ -41,6 +41,17 @@
           </div>
           <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" />
         </footer>
+        <section class="backup">
+          <div class="backup-text">
+            <p class="backup-title">Hidden sites</p>
+            <p class="backup-note">The strip reserves its space by shifting the page down, which an app laid out against the viewport — Google Meet, most video calls — does not respond to, so it would sit on top of that app's own toolbar. It is not injected on these.</p>
+            <div id="site-chips" class="site-chips"></div>
+          </div>
+          <form id="site-form" class="site-form">
+            <input id="site-input" class="site-input" type="text" placeholder="meet.google.com" aria-label="Site to hide the strip on" />
+            <button type="submit" class="ghost-button">Hide</button>
+          </form>
+        </section>
       </main>
     </div>
     <script src="config.js"></script>

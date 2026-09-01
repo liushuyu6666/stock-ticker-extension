@@ -27,7 +27,7 @@ It cannot appear on `chrome://` pages, the Web Store, or the PDF viewer — exte
 
 **Not on the new tab page, deliberately.** Chrome offers no way to add anything to `chrome://new-tab-page`: `chrome_url_overrides` *replaces* it wholesale, so putting the bar there would cost you the wallpaper, the shortcut tiles and the Continue-with-these-tabs card. That trade is not worth a ticker strip, so the override was removed and the new tab is Chrome's own again.
 
-**Known limitation:** the bar reserves its strip by shifting the document down. Sites with their own `position: fixed` header still paint at viewport top and will overlap it. There is no generic fix; those sites need a per-domain tweak.
+**Known limitation, and what to do about it:** the bar reserves its strip by shifting the document down. An app that lays itself out against the viewport rather than the document — Google Meet, most video calls, anything with a `position: fixed` header — does not move, so the strip lands on top of its own toolbar. No stylesheet can fix that from a content script, so the answer is to not inject there: **Hidden sites** on the config page is a list of hosts the strip stays off, `meet.google.com` by default. A stored host covers its subdomains, and adding or removing one takes effect on open tabs immediately rather than at the next reload.
 
 # Configuration
 
@@ -46,7 +46,7 @@ The countdown always counts. A zero means a poll is due, and a due poll is somet
 
 Under them is **Refresh**, which runs a gap check and a quote poll immediately — the same two code paths a scheduled tick uses — and the countdown and timestamp move with its reply.
 
-**Watchlist backup**, below the grid, exports your symbols and targets to a JSON file, and imports one back. It exists because uninstalling a Chrome extension erases everything it stores — both storage areas, and the synced copy on Google's servers with them. No API survives that, so the only way a watchlist outlives a reinstall is a copy Chrome does not control. An import **merges**: symbols you already have keep their place and take the file's target, and anything new is appended, so restoring onto a populated list never destroys what is there.
+**Hidden sites**, below the grid, is where you name the pages the strip should stay off — see the limitation above. **Watchlist backup**, beside it, exports your symbols and targets to a JSON file, and imports one back. It exists because uninstalling a Chrome extension erases everything it stores — both storage areas, and the synced copy on Google's servers with them. No API survives that, so the only way a watchlist outlives a reinstall is a copy Chrome does not control. An import **merges**: symbols you already have keep their place and take the file's target, and anything new is appended, so restoring onto a populated list never destroys what is there.
 
 The page is a sidebar plus a main panel. The sidebar holds one section today (*Tickers*, with a live count); it is built from a list so the next section is an array entry rather than a rewrite.
 

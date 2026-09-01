@@ -5,7 +5,8 @@ export const STORAGE_KEYS = {
   snapshot: 'cache:snapshot',
   history: (symbol: string) => `history:${symbol}`,
   historyIndex: 'history:index',
-  lastConsumerSeenAt: 'meta:lastConsumerSeenAt'
+  lastConsumerSeenAt: 'meta:lastConsumerSeenAt',
+  hiddenSites: 'hiddenSites'
 } as const;
 
 export type Request =
@@ -18,12 +19,15 @@ export type Request =
   | { type: 'REMOVE_SYMBOL'; symbol: string }
   | { type: 'SET_TARGET'; symbol: string; targetPrice: number }
   | { type: 'IMPORT_WATCHLIST'; entries: WatchlistEntry[] }
+  | { type: 'GET_HIDDEN_SITES' }
+  | { type: 'SET_HIDDEN_SITES'; sites: string[] }
   | { type: 'REFRESH_NOW' }
   | { type: 'OPEN_CONFIG' };
 
 export type Response =
   | { ok: true; snapshot: TickerSnapshot }
   | { ok: true; entries: WatchlistEntry[] }
+  | { ok: true; sites: string[] }
   | { ok: true; matches: SymbolMatch[] }
   | { ok: true; preview: SymbolPreview }
   | { ok: true }

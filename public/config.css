@@ -143,6 +143,54 @@ body {
 .ghost-button:hover { background: var(--porcelain); }
 .ghost-button:disabled { opacity: 0.5; cursor: default; }
 
+.site-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+.site-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.site-chip-remove {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.site-chip-remove:hover { background: rgba(217, 48, 37, 0.12); color: var(--red); }
+
+.site-empty { font-size: 12px; color: var(--ink-faint); }
+
+.site-form { display: flex; flex: 0 0 auto; gap: 8px; }
+
+.site-input {
+  width: 190px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.site-input:focus { outline: 2px solid rgba(31, 35, 40, 0.25); outline-offset: 1px; }
+
 .visually-hidden {
   position: absolute;
   width: 1px;

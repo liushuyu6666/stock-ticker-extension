@@ -4,6 +4,7 @@ import type { SymbolMatch, TickerRow, TickerSnapshot } from '../shared/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { FreshnessClock } from './FreshnessClock';
 import { SearchResultsView } from './SearchResultsView';
+import { HiddenSitesEditor } from './HiddenSitesEditor';
 import { WatchlistBackup } from './WatchlistBackup';
 import { SidebarNav } from './SidebarNav';
 import { SymbolSearchBox } from './SymbolSearchBox';
@@ -82,6 +83,13 @@ export class ConfigApp {
       document.getElementById('import') as HTMLButtonElement,
       document.getElementById('import-file') as HTMLInputElement,
       (snapshot) => this.apply(snapshot),
+      (message, isError) => this.setStatus(message, isError)
+    );
+
+    new HiddenSitesEditor(
+      document.getElementById('site-form') as HTMLFormElement,
+      document.getElementById('site-input') as HTMLInputElement,
+      document.getElementById('site-chips') as HTMLElement,
       (message, isError) => this.setStatus(message, isError)
     );
 
