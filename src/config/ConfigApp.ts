@@ -48,8 +48,12 @@ export class ConfigApp {
     this.body = document.getElementById('main-body') as HTMLElement;
     this.confirm = new ConfirmDialog(document.body);
     this.detail = new TickerDetailDialog(document.body);
-    this.clock = new FreshnessClock(document.getElementById('freshness') as HTMLElement, () =>
-      void this.refreshNow()
+    this.clock = new FreshnessClock(
+      document.getElementById('freshness') as HTMLElement,
+      () => void this.refreshNow(),
+      // The class rides on the host rather than the cards, so a re-render cannot
+      // drop it and a card never has to know its own age.
+      (stale) => this.body.classList.toggle('is-stale', stale)
     );
     this.refreshButton = document.getElementById('refresh') as HTMLButtonElement;
     this.refreshButton.addEventListener('click', () => void this.refreshNow());

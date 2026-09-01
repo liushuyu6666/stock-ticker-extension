@@ -31,11 +31,19 @@ export class FreshnessClock {
 
   /** Set while a refresh triggered by the countdown reaching zero is pending. */
   private dueFired = false;
+  private wasStale = false;
 
   constructor(
     private readonly host: HTMLElement,
     /** Called when the countdown runs out, so a due poll happens rather than being announced. */
-    private readonly onDue: () => void
+    private readonly onDue: () => void,
+    /**
+     * Called whenever staleness flips. The clock is the only thing on the page
+     * ticking every second, so it is where "the prices are old now" is noticed —
+     * the grid is repainted by snapshots, and a snapshot is exactly what stops
+     * arriving in this state.
+     */
+    private readonly onStaleChange: (stale: boolean) => void
   ) {
     this.label = document.createElement('span');
     this.label.className = 'freshness-label';
@@ -80,6 +88,10 @@ export class FreshnessClock {
 
     const now = Date.now();
     const stale = isStale(updatedAt, now);
+    if (stale !== this.wasStale) {
+      this.wasStale = stale;
+      this.onStaleChange(stale);
+    }
     const remaining = msUntilNextRefresh(attemptedAt, now);
 
     // The countdown always counts. A zero means a poll is due, and a due poll is

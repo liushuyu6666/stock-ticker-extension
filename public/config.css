@@ -432,6 +432,14 @@ body {
 
 /* Sits in the corner the remove button vacates: that button is transparent
    until the card is hovered, so at rest this marker is the only thing there. */
+/* Dimmed on the same rule as the bar: past the staleness threshold the prices
+   on these cards did not come from a recent poll, and a frozen number that
+   looks live is worse than one that visibly recedes. */
+.main-body.is-stale .card {
+  opacity: 0.55;
+  transition: opacity 400ms ease;
+}
+
 .card-alert {
   flex: 0 0 auto;
   width: 18px;

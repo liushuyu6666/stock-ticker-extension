@@ -146,7 +146,7 @@ Five cadences run in all — *Network calls* below lists them. Three are what a 
 
 | Clock | Period | Decides |
 |---|---|---|
-| **The quote poll** | 10 min | when the data changes — the only one of the three that fetches; see [Scheduled flow](#scheduled-flow) |
+| **The quote poll** | 10 min | when the data changes — the only one of the three that fetches; a failed poll reddens the countdown; see [Scheduled flow](#scheduled-flow) |
 | **The redraw** | irregular | when the screen is rebuilt — it follows a payload being published, so it can never run more often than the poll; see [Scheduled flow](#scheduled-flow) |
 | **The age check** | 30 s on the bar, 1 s in the sidebar | how what is already on screen is presented — it dims prices that have stopped arriving, and nothing else |
 
@@ -156,10 +156,29 @@ Read that as a sentence: the poll decides when data changes, the redraw follows 
 
 Sometimes Yahoo throws — a 429 for asking too often, a 5xx, or nothing at all because the laptop was asleep and the alarm never ran. The poll then has no valid price, and rather than blanking the strip the extension republishes the rows it already had. That is the right default, and also the problem: a frozen price looks exactly like a live one.
 
-The age check is what notices. `updatedAt` is the timestamp of the last *successful* quote fetch, and a failed poll leaves it untouched, so the test is one subtraction — `now − updatedAt` against `STALE_AFTER_MS`, thirty minutes. Past that, every card in the bar drops to `opacity: 0.55` and the sidebar countdown turns red, reading `prices 34 min old`. Nothing is rebuilt: one class is toggled and the compositor draws the existing layer differently, which is why running the check less often would save nothing.
+The age check is what notices. `updatedAt` is the timestamp of the last *successful* quote fetch, and a failed poll leaves it untouched, so the test is one subtraction — `now − updatedAt` against `STALE_AFTER_MS`, thirty minutes. Past that, every card drops to `opacity: 0.55` — on the bar and on the config page alike — and the sidebar's `last update` timestamp turns red. Nothing is rebuilt: one class is toggled and the compositor draws the existing layer differently, which is why running the check less often would save nothing.
 
-Thirty minutes is three polls. Anything at or below the ten-minute period would dim the bar through most of every cycle, since a payload is almost a full period old just before the next one lands.
+Thirty minutes is three polls, and it is the poll period that sets the floor. `updatedAt` moves only when a poll succeeds, so even in perfect health the payload's age sawtooths: zero the instant prices land, climbing to nearly ten minutes as the next poll approaches, back to zero. A ten-minute threshold would therefore be crossed at the tail of *every* healthy cycle, dimming the bar for a moment each time when nothing was wrong at all. Three periods of headroom means it dims only after three consecutive polls have failed to land.
 
+
+### The two thresholds on a timeline
+
+Measured from the last poll that actually returned prices. Every tick is one poll period, and the two thresholds sit at different distances because they answer different questions — whether the schedule is running, and whether the prices are old.
+
+```
+ last good poll          poll due               poll due               poll due
+       │                     │                      │                      │
+       ▼                     ▼                      ▼                      ▼
+       ├───── 10 min ────────┼────── 10 min ────────┼────── 10 min ────────┤
+     0 min                 10 min                 20 min                 30 min
+
+  prices land,        NEXT REFRESH reddens    still only the         LAST UPDATE reddens
+  both lines grey     if this poll failed     countdown is red:      and every card dims
+                      or never ran            the prices it names    to 55% opacity, bar
+                                              are still fine         and config page both
+```
+
+A healthy run never leaves the first tick: prices land, the countdown falls to zero over ten minutes, the next poll lands and resets it. Everything to the right of that only happens when polls stop landing.
 
 ## The three threads
 
@@ -205,7 +224,7 @@ Three signals, coarse to specific:
 
 | Where | Signal | Trigger |
 |---|---|---|
-| The bar | every card fades to 55% opacity | the payload is **30 minutes** old |
+| The bar and the config grid | every card fades to 55% opacity | the payload is **30 minutes** old |
 | The config sidebar | `next refresh 7:12`, counting down; once stale, a red `prices 34 min old` | the same 30-minute threshold |
 | A config card | a red `!` in its top-right corner | the **last** refresh threw |
 
