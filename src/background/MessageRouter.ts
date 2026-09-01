@@ -1,7 +1,7 @@
 import { QUOTE_PERIOD_MS } from '../shared/freshness';
 import type { Request, Response } from '../shared/messages';
 import { STORAGE_KEYS } from '../shared/messages';
-import { HIDDEN_SITE_DEFAULTS, normalizeSite } from '../shared/sites';
+import { HIDDEN_SITE_DEFAULTS, effectiveSites, normalizeSite, readEdits, toEdits } from '../shared/sites';
 import type { HistoryStore } from './HistoryStore';
 import type { QuoteProvider } from './QuoteProvider';
 import type { RefreshScheduler } from './RefreshScheduler';
@@ -70,12 +70,12 @@ export class MessageRouter {
       }
 
       case 'GET_HIDDEN_SITES':
-        return { ok: true, sites: await readHiddenSites() };
+        return { ok: true, sites: await readHiddenSites(), defaults: [...HIDDEN_SITE_DEFAULTS] };
 
       case 'SET_HIDDEN_SITES': {
         const sites = [...new Set(request.sites.map(normalizeSite).filter((site): site is string => site !== null))];
-        await chrome.storage.sync.set({ [STORAGE_KEYS.hiddenSites]: sites });
-        return { ok: true, sites };
+        await chrome.storage.sync.set({ [STORAGE_KEYS.hiddenSites]: toEdits(sites) });
+        return { ok: true, sites, defaults: [...HIDDEN_SITE_DEFAULTS] };
       }
 
       case 'GET_WATCHLIST':
@@ -161,14 +161,7 @@ export class MessageRouter {
   }
 }
 
-/**
- * Defaults apply only until the key exists. Once the user has edited the list —
- * including emptying it — their version stands, or removing the shipped default
- * would be impossible.
- */
 async function readHiddenSites(): Promise<string[]> {
   const stored = await chrome.storage.sync.get(STORAGE_KEYS.hiddenSites);
-  const sites = stored[STORAGE_KEYS.hiddenSites];
-  if (!Array.isArray(sites)) return [...HIDDEN_SITE_DEFAULTS];
-  return sites.filter((site): site is string => typeof site === 'string');
+  return effectiveSites(readEdits(stored[STORAGE_KEYS.hiddenSites]));
 }

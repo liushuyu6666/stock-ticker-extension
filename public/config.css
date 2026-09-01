@@ -173,6 +173,15 @@ body {
 
 .site-chip-remove:hover { background: rgba(217, 48, 37, 0.12); color: var(--red); }
 
+/* A shipped default reads lighter than one the user added, so the list shows at
+   a glance which entries are theirs. */
+.site-chip.is-default {
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
 .site-empty { font-size: 12px; color: var(--ink-faint); }
 
 .site-form { display: flex; flex: 0 0 auto; gap: 8px; }

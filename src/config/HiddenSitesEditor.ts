@@ -8,6 +8,7 @@ import { normalizeSite } from '../shared/sites';
  */
 export class HiddenSitesEditor {
   private sites: string[] = [];
+  private defaults: string[] = [];
 
   constructor(
     private readonly form: HTMLFormElement,
@@ -24,7 +25,10 @@ export class HiddenSitesEditor {
 
   private async load(): Promise<void> {
     const response = await sendMessage({ type: 'GET_HIDDEN_SITES' });
-    if ('sites' in response && response.ok) this.render(response.sites);
+    if ('sites' in response && response.ok) {
+      this.defaults = response.defaults;
+      this.render(response.sites);
+    }
   }
 
   private async add(): Promise<void> {
@@ -48,7 +52,10 @@ export class HiddenSitesEditor {
       this.onStatus(response.error, true);
       return;
     }
-    if ('sites' in response) this.render(response.sites);
+    if ('sites' in response) {
+      this.defaults = response.defaults;
+      this.render(response.sites);
+    }
     this.onStatus(message, false);
   }
 
@@ -56,8 +63,12 @@ export class HiddenSitesEditor {
     this.sites = sites;
     this.list.replaceChildren(
       ...sites.map((site) => {
+        const shipped = this.defaults.includes(site);
         const chip = document.createElement('span');
-        chip.className = 'site-chip';
+        chip.className = shipped ? 'site-chip is-default' : 'site-chip';
+        chip.title = shipped
+          ? `${site} is anchored to the window, so the strip ships hidden here`
+          : `You added ${site}`;
         chip.append(site);
 
         const remove = document.createElement('button');

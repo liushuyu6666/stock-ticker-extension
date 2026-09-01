@@ -27,7 +27,7 @@ export type Request =
 export type Response =
   | { ok: true; snapshot: TickerSnapshot }
   | { ok: true; entries: WatchlistEntry[] }
-  | { ok: true; sites: string[] }
+  | { ok: true; sites: string[]; defaults: string[] }
   | { ok: true; matches: SymbolMatch[] }
   | { ok: true; preview: SymbolPreview }
   | { ok: true }

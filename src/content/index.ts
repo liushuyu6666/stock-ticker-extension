@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from '../shared/messages';
-import { HIDDEN_SITE_DEFAULTS, isHiddenSite } from '../shared/sites';
+import { effectiveSites, isHiddenSite, readEdits } from '../shared/sites';
 import { TICKER_CSS } from '../ui/styles';
 import { TickerBar } from '../ui/TickerBar';
 import { TickerClient } from '../ui/TickerClient';
@@ -68,8 +68,7 @@ function pushPageDown(): void {
 async function hiddenHere(): Promise<boolean> {
   try {
     const stored = await chrome.storage.sync.get(STORAGE_KEYS.hiddenSites);
-    const sites = stored[STORAGE_KEYS.hiddenSites];
-    return isHiddenSite(location.hostname, Array.isArray(sites) ? sites : HIDDEN_SITE_DEFAULTS);
+    return isHiddenSite(location.hostname, effectiveSites(readEdits(stored[STORAGE_KEYS.hiddenSites])));
   } catch {
     // Storage unavailable (a torn-down extension context); showing the bar is
     // the safer failure, since hiding it silently looks like a broken install.

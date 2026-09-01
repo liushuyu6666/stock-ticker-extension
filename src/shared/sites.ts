@@ -1,14 +1,33 @@
 /**
- * The bar reserves its strip by shifting the document down, which works on an
- * ordinary page and cannot work on an app whose own chrome is `position: fixed`
- * — Google Meet, most video calls, anything laid out against the viewport
- * rather than the document. There the strip has nothing to push, so it lands on
- * top of the app's own toolbar.
+ * Sites the strip stays off out of the box.
  *
- * No stylesheet can fix that from a content script, so the answer is to not
- * inject there at all, and to let the user say where "there" is.
+ * The bar reserves its space by shifting the document down, which works on an
+ * ordinary page and cannot work on an app anchored to the *window* — its chrome
+ * is `position: fixed`, so moving the document moves nothing and the strip
+ * lands on the app's own toolbar. No stylesheet fixes that from a content
+ * script; the only answer is to not inject there.
+ *
+ * This list is maintained rather than final: it grows as sites turn out to
+ * behave this way, and a shipped addition reaches everyone, because what is
+ * stored is the user's *edits* to this list rather than a copy of it. Anything
+ * missing can be added on the config page.
  */
-export const HIDDEN_SITE_DEFAULTS = ['meet.google.com'];
+export const HIDDEN_SITE_DEFAULTS = [
+  // Video calls: the whole window is the app, and its controls are pinned to it.
+  'meet.google.com',
+  'zoom.us',
+  'teams.microsoft.com',
+  'discord.com',
+  'whereby.com',
+  // Workspace apps with a fixed toolbar the strip would land on.
+  'mail.google.com',
+  'docs.google.com',
+  'calendar.google.com',
+  'slack.com',
+  'notion.so',
+  'figma.com',
+  'linear.app'
+];
 
 /**
  * Accepts what a person would actually type — `meet.google.com`,
@@ -47,4 +66,57 @@ export function isHiddenSite(hostname: string, sites: readonly string[]): boolea
     const target = site.toLowerCase().replace(/^www\./, '');
     return host === target || host.endsWith(`.${target}`);
   });
+}
+
+/** What the user has changed about the shipped list, and nothing more. */
+export interface HiddenSiteEdits {
+  /** Sites added beyond the defaults. */
+  added: string[];
+  /** Defaults the user has explicitly put back. */
+  removed: string[];
+}
+
+/**
+ * Stored as edits rather than as the resulting list, so a default added in a
+ * later version still reaches an install that has already been customised —
+ * storing the result would freeze each user on the list that shipped the day
+ * they first touched it.
+ */
+export function effectiveSites(edits: HiddenSiteEdits): string[] {
+  const removed = new Set(edits.removed);
+  return [...new Set([...HIDDEN_SITE_DEFAULTS.filter((site) => !removed.has(site)), ...edits.added])];
+}
+
+/** The inverse: what the user must have changed for this list to be the result. */
+export function toEdits(sites: readonly string[]): HiddenSiteEdits {
+  const wanted = new Set(sites);
+  return {
+    added: sites.filter((site) => !HIDDEN_SITE_DEFAULTS.includes(site)),
+    removed: HIDDEN_SITE_DEFAULTS.filter((site) => !wanted.has(site))
+  };
+}
+
+/**
+ * The list shipped by the first version that had one. A stored array came from
+ * that version, so it must be diffed against *those* defaults: reading it
+ * against today's would record every default added since as one the user had
+ * removed, and permanently opt them out of a list they never saw.
+ */
+const LEGACY_DEFAULTS = ['meet.google.com'];
+
+/** Accepts the edits shape, and the plain array an earlier version stored. */
+export function readEdits(stored: unknown): HiddenSiteEdits {
+  if (Array.isArray(stored)) {
+    const sites = stored.filter((site): site is string => typeof site === 'string');
+    const wanted = new Set(sites);
+    return {
+      added: sites.filter((site) => !LEGACY_DEFAULTS.includes(site)),
+      removed: LEGACY_DEFAULTS.filter((site) => !wanted.has(site))
+    };
+  }
+  const edits = stored as Partial<HiddenSiteEdits> | undefined;
+  return {
+    added: Array.isArray(edits?.added) ? edits.added.filter((s): s is string => typeof s === 'string') : [],
+    removed: Array.isArray(edits?.removed) ? edits.removed.filter((s): s is string => typeof s === 'string') : []
+  };
 }
